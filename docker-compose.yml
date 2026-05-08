@@ -1,0 +1,45 @@
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - REDIS_ADDR=redis:6379
+      - SQLITE_PATH=/data/data.db
+      - UPLOAD_DIR=/uploads
+      - PORT=8080
+    volumes:
+      - ./data:/data
+      - ./uploads:/uploads
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./web-ui
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+
+volumes:
+  redis_data:
