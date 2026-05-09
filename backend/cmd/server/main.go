@@ -15,6 +15,7 @@ func main() {
 	redisAddr := getEnv("REDIS_ADDR", "localhost:6379")
 	sqlitePath := getEnv("SQLITE_PATH", "./data.db")
 	uploadDir := getEnv("UPLOAD_DIR", "./uploads")
+	pcapDir := getEnv("PCAP_DIR", "./pcap")
 	port := getEnv("PORT", "8080")
 
 	if err := os.MkdirAll(uploadDir, 0755); err != nil {
@@ -34,7 +35,7 @@ func main() {
 	defer redisStore.Close()
 
 	sched := scheduler.NewTaskScheduler(sqliteStore, redisStore)
-	taskHandler := taskhandler.NewTaskHandler(sched, uploadDir)
+	taskHandler := taskhandler.NewTaskHandler(sched, uploadDir, pcapDir)
 	wsHandler := taskhandler.NewWSHandler(sched)
 
 	r := gin.Default()
@@ -49,6 +50,7 @@ func main() {
 		v1.POST("/tasks/:id/start", taskHandler.StartTask)
 		v1.POST("/tasks/:id/stop", taskHandler.StopTask)
 		v1.GET("/tasks/:id/stats", taskHandler.GetTaskStats)
+		v1.GET("/pcap/dirs", taskHandler.ListPCAPDirs)
 		v1.GET("/tasks/:id/file", taskHandler.DownloadFile)
 		v1.GET("/tasks/:id/status", taskHandler.GetTaskStatus)
 		v1.GET("/ws/tasks/:id", wsHandler.HandleTaskWS)

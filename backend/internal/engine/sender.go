@@ -23,6 +23,9 @@ type PacketSender struct {
 	interval   time.Duration
 	stopCh     chan struct{}
 	wg         sync.WaitGroup
+	createdAt  time.Time
+	lastRunAt  *time.Time
+	totalRunMs int64
 }
 
 func NewPacketSender(cfg *models.Task, domains []string) (*PacketSender, error) {
@@ -42,14 +45,17 @@ func NewPacketSender(cfg *models.Task, domains []string) (*PacketSender, error) 
 	}
 
 	return &PacketSender{
-		conn:     conn,
-		srcMAC:   srcMAC,
-		dstMAC:   dstMAC,
-		srcIP:    net.ParseIP(cfg.SrcIP),
-		dstIP:    net.ParseIP(cfg.DstIP),
-		qos:      NewQoSController(cfg.QoS),
-		domains:  domains,
-		stopCh:   make(chan struct{}),
+		conn:       conn,
+		srcMAC:     srcMAC,
+		dstMAC:     dstMAC,
+		srcIP:      net.ParseIP(cfg.SrcIP),
+		dstIP:      net.ParseIP(cfg.DstIP),
+		qos:        NewQoSController(cfg.QoS),
+		domains:    domains,
+		stopCh:     make(chan struct{}),
+		createdAt:  cfg.CreatedAt,
+		lastRunAt:  cfg.LastRunAt,
+		totalRunMs: cfg.TotalRunMs,
 	}, nil
 }
 
@@ -87,6 +93,9 @@ func (s *PacketSender) run(ctx context.Context, taskID uuid.UUID, statsChan chan
 				StartTime:  startTime,
 				ElapsedMs:   time.Since(startTime).Milliseconds(),
 				Status:      models.TaskStatusRunning,
+				CreatedAt:   s.createdAt,
+				LastRunAt:   s.lastRunAt,
+				TotalRunMs:  s.totalRunMs,
 			}
 			select {
 			case statsChan <- stats:
@@ -116,24 +125,52 @@ func (s *PacketSender) sendPacket() error {
 }
 
 type PCAPSender struct {
-	conn     net.PacketConn
-	pcapFile string
-	cfg      *models.Task
-	stopCh   chan struct{}
-	wg       sync.WaitGroup
+	sockfd     int
+	cfg        *models.Task
+	groups     []packetGroup
+	totalPkts  int
+	curGroup   int
+	curPkt     int
+	qos        *QoSController
+	stopCh     chan struct{}
+	wg         sync.WaitGroup
+	createdAt  time.Time
+	lastRunAt  *time.Time
+	totalRunMs int64
 }
 
-func NewPCAPSender(cfg *models.Task, pcapFile string) (*PCAPSender, error) {
-	conn, err := net.ListenPacket("udp4", "0.0.0.0:0")
+func NewPCAPSender(cfg *models.Task, pcapDir string) (*PCAPSender, error) {
+	srcIP := net.ParseIP(cfg.SrcIP)
+	if srcIP == nil {
+		return nil, fmt.Errorf("invalid source IP: %s", cfg.SrcIP)
+	}
+
+	fd, _, err := openRawSocket(srcIP)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open raw socket: %w", err)
+		return nil, fmt.Errorf("open raw socket: %w", err)
+	}
+
+	groups, err := loadPacketsFromPath(pcapDir, cfg.SrcMAC, cfg.DstMAC, cfg.SrcIP, cfg.DstIP)
+	if err != nil {
+		CloseRaw(fd)
+		return nil, fmt.Errorf("load pcap: %w", err)
+	}
+
+	totalPkts := 0
+	for _, g := range groups {
+		totalPkts += len(g.Packets)
 	}
 
 	return &PCAPSender{
-		conn:     conn,
-		pcapFile: pcapFile,
-		cfg:      cfg,
-		stopCh:   make(chan struct{}),
+		sockfd:     fd,
+		cfg:        cfg,
+		groups:     groups,
+		totalPkts:  totalPkts,
+		qos:        NewQoSController(cfg.QoS),
+		stopCh:     make(chan struct{}),
+		createdAt:  cfg.CreatedAt,
+		lastRunAt:  cfg.LastRunAt,
+		totalRunMs: cfg.TotalRunMs,
 	}, nil
 }
 
@@ -145,11 +182,15 @@ func (p *PCAPSender) Start(ctx context.Context, taskID uuid.UUID, statsChan chan
 func (p *PCAPSender) Stop() {
 	close(p.stopCh)
 	p.wg.Wait()
-	p.conn.Close()
+	CloseRaw(p.sockfd)
 }
 
 func (p *PCAPSender) run(ctx context.Context, taskID uuid.UUID, statsChan chan<- *models.TaskStats) {
 	defer p.wg.Done()
+
+	if len(p.groups) == 0 || p.totalPkts == 0 {
+		return
+	}
 
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
@@ -171,6 +212,9 @@ func (p *PCAPSender) run(ctx context.Context, taskID uuid.UUID, statsChan chan<-
 				StartTime:  startTime,
 				ElapsedMs:  time.Since(startTime).Milliseconds(),
 				Status:     models.TaskStatusRunning,
+				CreatedAt:  p.createdAt,
+				LastRunAt:  p.lastRunAt,
+				TotalRunMs: p.totalRunMs,
 			}
 			select {
 			case statsChan <- stats:
@@ -178,8 +222,23 @@ func (p *PCAPSender) run(ctx context.Context, taskID uuid.UUID, statsChan chan<-
 			}
 			sentCount = 0
 		default:
-			time.Sleep(time.Second / time.Duration(p.cfg.QoS.TargetQPS))
-			sentCount++
+			grp := p.groups[p.curGroup]
+			if len(grp.Packets) > 0 {
+				if err := WriteRaw(p.sockfd, grp.Packets[p.curPkt]); err != nil {
+					return
+				}
+				sentCount++
+			}
+
+			p.curPkt++
+			if p.curPkt >= len(grp.Packets) {
+				p.curPkt = 0
+				p.curGroup++
+				if p.curGroup >= len(p.groups) {
+					p.curGroup = 0
+				}
+			}
+			p.qos.Wait()
 		}
 	}
 }
@@ -189,7 +248,5 @@ func (p *PCAPSender) ReadPCAPFile(file string) ([][]byte, error) {
 }
 
 func (p *PCAPSender) sendPacket(packetData []byte) error {
-	dstAddr := net.UDPAddr{IP: net.ParseIP(p.cfg.DstIP), Port: 53}
-	_, err := p.conn.WriteTo(packetData, &dstAddr)
-	return err
+	return WriteRaw(p.sockfd, packetData)
 }

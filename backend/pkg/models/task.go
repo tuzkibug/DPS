@@ -35,33 +35,39 @@ type Task struct {
 	ID           uuid.UUID   `json:"id"`
 	Name         string      `json:"name"`
 	InputType    InputType   `json:"input_type"`
-	FilePath     string      `json:"file_path"`      // CSV or PCAP file path
+	FilePath     string      `json:"file_path"`
 	SrcIP        string      `json:"src_ip"`
 	DstIP        string      `json:"dst_ip"`
 	SrcMAC       string      `json:"src_mac"`
 	DstMAC       string      `json:"dst_mac"`
-	StartTime    time.Time   `json:"start_time"`     // 计划开始时间
-	DurationMs   int         `json:"duration_ms"`    // 持续时间(毫秒), 0表示无限
+	StartTime    time.Time   `json:"start_time"`
+	DurationMs   int         `json:"duration_ms"`
 	QoS          QoSConfig   `json:"qos"`
 	Status       TaskStatus  `json:"status"`
 	CreatedAt    time.Time   `json:"created_at"`
 	UpdatedAt    time.Time   `json:"updated_at"`
+	LastRunAt    *time.Time  `json:"last_run_at"`
+	TotalRunMs   int64       `json:"total_run_ms"`
 }
 
 type TaskStats struct {
-	TaskID       uuid.UUID `json:"task_id"`
-	SentCount    int64     `json:"sent_count"`
-	FailedCount  int64     `json:"failed_count"`
-	CurrentQPS   float64   `json:"current_qps"`
-	StartTime    time.Time `json:"start_time"`
-	ElapsedMs    int64     `json:"elapsed_ms"`
+	TaskID       uuid.UUID  `json:"task_id"`
+	SentCount    int64      `json:"sent_count"`
+	FailedCount  int64      `json:"failed_count"`
+	CurrentQPS   float64    `json:"current_qps"`
+	StartTime    time.Time  `json:"start_time"`
+	ElapsedMs    int64      `json:"elapsed_ms"`
 	Status       TaskStatus `json:"status"`
+	CreatedAt    time.Time  `json:"created_at"`
+	LastRunAt    *time.Time `json:"last_run_at"`
+	TotalRunMs   int64      `json:"total_run_ms"`
 }
 
 type CreateTaskRequest struct {
 	Name        string     `json:"name" binding:"required"`
 	InputType   InputType  `json:"input_type" binding:"required"`
 	FileContent string     `json:"file_content"` // base64 encoded file content
+	FilePath    string     `json:"file_path"`    // server-side path for PCAP files
 	SrcIP       string     `json:"src_ip" binding:"required"`
 	DstIP       string     `json:"dst_ip" binding:"required"`
 	SrcMAC      string     `json:"src_mac" binding:"required"`

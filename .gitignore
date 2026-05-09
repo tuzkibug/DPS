@@ -4,6 +4,7 @@
 # Runtime data
 data/
 uploads/
+pcap/
 
 # Backend
 backend/server

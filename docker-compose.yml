@@ -2,7 +2,7 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT:-6379}:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -15,14 +15,15 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    ports:
-      - "8080:8080"
+    network_mode: host
     environment:
-      - REDIS_ADDR=redis:6379
+      - REDIS_ADDR=localhost:${REDIS_PORT:-6379}
       - SQLITE_PATH=/data/data.db
       - UPLOAD_DIR=/uploads
-      - PORT=8080
+      - PCAP_DIR=/pcap
+      - PORT=${BACKEND_PORT:-8080}
     volumes:
+      - ./pcap:/pcap
       - ./data:/data
       - ./uploads:/uploads
     cap_add:
@@ -36,8 +37,10 @@ services:
     build:
       context: ./web-ui
       dockerfile: Dockerfile
-    ports:
-      - "3000:3000"
+    network_mode: host
+    environment:
+      - FRONTEND_PORT=${FRONTEND_PORT:-3000}
+      - BACKEND_PORT=${BACKEND_PORT:-8080}
     depends_on:
       - backend
 

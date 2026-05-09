@@ -84,10 +84,12 @@ func (s *TaskScheduler) StartTask(task *models.Task) error {
 
 	go s.watchStats(task.ID, statsChan)
 
+	now := time.Now()
 	task.Status = models.TaskStatusRunning
+	task.LastRunAt = &now
 	s.sqlite.UpdateTask(task)
 	s.redis.SetTaskStatus(context.Background(), task.ID, models.TaskStatusRunning)
-	s.redis.SetStartTime(context.Background(), task.ID, time.Now())
+	s.redis.SetStartTime(context.Background(), task.ID, now)
 
 	return nil
 }
@@ -109,6 +111,11 @@ func (s *TaskScheduler) StopTask(taskID uuid.UUID) error {
 
 	task, err := s.sqlite.GetTask(taskID)
 	if err == nil {
+		startTime, _ := s.redis.GetStartTime(context.Background(), taskID)
+		if !startTime.IsZero() {
+			elapsed := time.Since(startTime).Milliseconds()
+			task.TotalRunMs += elapsed
+		}
 		task.Status = models.TaskStatusPending
 		s.sqlite.UpdateTask(task)
 	}

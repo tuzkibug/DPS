@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"dns-sender/internal/scheduler"
 	"dns-sender/pkg/models"
@@ -16,12 +17,14 @@ import (
 type TaskHandler struct {
 	scheduler *scheduler.TaskScheduler
 	uploadDir string
+	pcapDir   string
 }
 
-func NewTaskHandler(sched *scheduler.TaskScheduler, uploadDir string) *TaskHandler {
+func NewTaskHandler(sched *scheduler.TaskScheduler, uploadDir, pcapDir string) *TaskHandler {
 	return &TaskHandler{
 		scheduler: sched,
 		uploadDir: uploadDir,
+		pcapDir:   pcapDir,
 	}
 }
 
@@ -33,7 +36,25 @@ func (h *TaskHandler) CreateTask(c *gin.Context) {
 	}
 
 	filePath := ""
-	if req.FileContent != "" {
+	if req.InputType == models.InputTypePCAP && req.FilePath != "" {
+		// PCAP server-side path: join with base dir and validate
+		fullPath := filepath.Join(h.pcapDir, req.FilePath)
+		fullPath = filepath.Clean(fullPath)
+		if !strings.HasPrefix(fullPath, filepath.Clean(h.pcapDir)) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid file path"})
+			return
+		}
+		info, err := os.Stat(fullPath)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "path does not exist"})
+			return
+		}
+		if !info.IsDir() && filepath.Ext(fullPath) == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "path must be a directory or a pcap file"})
+			return
+		}
+		filePath = fullPath
+	} else if req.FileContent != "" {
 		data, err := base64.StdEncoding.DecodeString(req.FileContent)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid file content"})
@@ -212,4 +233,42 @@ func (h *TaskHandler) GetTaskStatus(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"status": status})
+}
+
+func (h *TaskHandler) ListPCAPDirs(c *gin.Context) {
+	subpath := c.Query("path")
+	fullPath := filepath.Join(h.pcapDir, subpath)
+	fullPath = filepath.Clean(fullPath)
+
+	if !strings.HasPrefix(fullPath, filepath.Clean(h.pcapDir)) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid path"})
+		return
+	}
+
+	entries, err := os.ReadDir(fullPath)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "directory not found"})
+		return
+	}
+
+	dirs := []string{}
+	files := []string{}
+	for _, e := range entries {
+		if e.IsDir() {
+			dirs = append(dirs, e.Name())
+		} else if strings.HasSuffix(strings.ToLower(e.Name()), ".pcap") ||
+			strings.HasSuffix(strings.ToLower(e.Name()), ".pcapng") ||
+			strings.HasSuffix(strings.ToLower(e.Name()), ".cap") {
+			files = append(files, e.Name())
+		}
+	}
+
+	relPath := strings.TrimPrefix(fullPath, filepath.Clean(h.pcapDir))
+	relPath = strings.TrimPrefix(relPath, "/")
+
+	c.JSON(http.StatusOK, gin.H{
+		"dirs":         dirs,
+		"files":        files,
+		"current_path": relPath,
+	})
 }

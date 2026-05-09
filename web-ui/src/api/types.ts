@@ -13,6 +13,8 @@ export interface Task {
   status: TaskStatus;
   created_at: string;
   updated_at: string;
+  last_run_at: string | null;
+  total_run_ms: number;
 }
 
 export type TaskStatus = 'pending' | 'running' | 'stopped' | 'completed' | 'failed';
@@ -32,12 +34,16 @@ export interface TaskStats {
   start_time: string;
   elapsed_ms: number;
   status: TaskStatus;
+  created_at: string;
+  last_run_at: string | null;
+  total_run_ms: number;
 }
 
 export interface CreateTaskRequest {
   name: string;
   input_type: 'csv' | 'pcap';
   file_content?: string;
+  file_path?: string;
   src_ip: string;
   dst_ip: string;
   src_mac: string;
@@ -45,6 +51,12 @@ export interface CreateTaskRequest {
   start_time?: string;
   duration_ms?: number;
   qos: QoSConfig;
+}
+
+export interface PcapDirList {
+  dirs: string[];
+  files: string[];
+  current_path: string;
 }
 
 export interface UpdateTaskRequest {

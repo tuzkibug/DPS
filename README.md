@@ -4,11 +4,13 @@
 
 ## 功能特性
 
-- **双输入模式**：CSV 域名列表 / PCAP 抓包文件回放
+- **双输入模式**：CSV 域名列表 / PCAP 抓包文件回放（以太网帧级地址改写）
+- **PCAP 服务器路径**：无需上传，直接选择服务器端 PCAP 目录或文件，支持按日期组织
 - **QoS 控制**：精细控制发包速率（QPS）、抖动（Jitter）、延迟（Delay）
-- **实时监控**：WebSocket 推送实时发包统计（发送量、当前 QPS、失败数、运行时长）
-- **任务管理**：创建、查看配置、启动、停止、删除任务，支持上传文件下载
-- **Web 控制台**：React + Ant Design 现代前端界面
+- **实时监控**：WebSocket 推送统计（当前 QPS、失败数、运行时长、累计运行时长）
+- **任务管理**：创建、查看配置、启动、停止、删除任务，CSV 文件支持上传下载
+- **Web 控制台**：React + Ant Design 现代前端界面，PCAP 目录浏览器
+- **可配置端口**：通过 `.env` 文件自定义所有端口，适配任意部署环境
 
 ## 项目架构
 
@@ -62,7 +64,8 @@ DPS/
 │       ├── engine/
 │       │   ├── dns.go                # DNS 包构造、域名解析、QoS 控制器
 │       │   ├── dns_test.go
-│       │   └── sender.go             # UDP 发包器
+│       │   ├── pcap.go               # PCAP 解析、包地址改写、raw socket 发送
+│       │   └── sender.go             # UDP 发包器 + PCAP 回放器
 │       ├── scheduler/
 │       │   └── scheduler.go          # 任务调度，生命周期管理
 │       └── store/
@@ -120,6 +123,21 @@ docker compose ps
 | 前端界面 | http://localhost:3000 |
 | 后端 API | http://localhost:8080 |
 
+> Backend 和 Frontend 使用 `network_mode: host` 共享宿主机网络栈，
+> 确保 raw socket (AF_PACKET) 可直接绑定物理网卡发送 PCAP 回放流量。
+
+#### 自定义端口
+
+若默认端口被占用，创建 `.env` 文件（参考 `.env.example`）：
+
+```
+REDIS_PORT=6380
+BACKEND_PORT=9090
+FRONTEND_PORT=4000
+```
+
+`docker compose up -d` 会自动读取。不改端口则无需创建 `.env`。
+
 ### 本地开发
 
 **后端：**
@@ -147,9 +165,9 @@ npm run dev     # Vite 开发服务器，自动代理 /api → localhost:8080
 
 ## 使用指南
 
-### 1. 准备域名列表
+### 1. 准备数据
 
-创建 CSV 文件，每行一个域名：
+**CSV 模式**：创建域名列表文件，每行一个域名：
 
 ```
 www.example.com
@@ -157,7 +175,13 @@ www.google.com
 dns.example.org
 ```
 
-项目根目录提供了 `domain_list_example.csv` 作为参考。
+**PCAP 模式**：将 PCAP 文件放入 `./pcap/` 目录（Docker 自动挂载），可按日期组织子目录，例如：
+
+```
+pcap/
+├── 2025/10/24/dns_traffic.pcap
+├── test.pcap
+```
 
 ### 2. 创建任务
 
@@ -166,20 +190,22 @@ dns.example.org
 | 字段 | 说明 | 示例 |
 |------|------|------|
 | Task Name | 任务名称 | `DNS压力测试` |
-| Input Type | CSV 或 PCAP | `csv` |
-| Upload File | 上传域名列表文件 | `domains.csv` |
+| Input Type | CSV（域名列表）/ PCAP（包回放） | `csv` |
+| File | CSV：上传文件；PCAP：浏览服务器端目录或输入路径 | `test.pcap` |
 | Source IP | 源 IP 地址 | `10.0.2.15` |
 | Destination IP | 目标 DNS 服务器 IP | `8.8.8.8` |
-| Source MAC | 源 MAC 地址 | `aa:bb:cc:dd:ee:ff` |
-| Destination MAC | 目标 MAC 地址 | `11:22:33:44:55:66` |
+| Source MAC | 源 MAC 地址 | `08:00:27:ad:db:96` |
+| Destination MAC | 目标 MAC 地址 / 网关 MAC | `52:55:0a:00:02:02` |
 | Target QPS | 目标每秒发包数 | `100` |
-| Jitter | 速率抖动比例 (0-1)，在 QPS 间隔上叠加随机偏差 | `0.1` |
-| Min/Max Delay | 每包额外延迟范围 (ms)，模拟网络延迟 | `0` / `0` |
+| Jitter | 速率抖动比例 (0-1) | `0` |
+| Min/Max Delay | 每包额外延迟范围 (ms) | `0` / `0` |
+
+> PCAP 模式会将包内原有的源/目的 MAC 和 IP 全部替换为配置值，重算校验和后通过 raw socket 发送完整以太网帧。
 
 ### 3. 操作任务
 
 - **查看列表**：Tasks 页面展示所有任务，含名称、类型、目标 IP、状态
-- **点击任务名**：进入详情页，查看完整配置并可下载上传的文件
+- **点击任务名**：进入详情页，查看完整配置；CSV 任务可下载上传文件
 - **Start**：启动发包，状态变为 `running`
 - **Stop**：停止发包，状态恢复 `pending`
 - **Delete**：删除任务及关联的上传文件
@@ -188,10 +214,12 @@ dns.example.org
 
 任务启动后，实时面板展示：
 
-- **Sent Packets**：累计发包数
 - **Current QPS**：当前实际每秒发包数
 - **Failed**：发包失败数
-- **Elapsed**：已运行时间
+- **Current Run Time**：本次运行时长
+- **Created**：任务创建日期时间
+- **Last Run**：最后一次启动日期时间
+- **Total Run Time**：累计运行总时长
 
 监控数据通过 WebSocket 推送，刷新页面后状态保持。
 
@@ -209,6 +237,7 @@ dns.example.org
 | `GET` | `/api/v1/tasks/:id/stats` | 获取实时统计 |
 | `GET` | `/api/v1/tasks/:id/status` | 获取任务状态 |
 | `GET` | `/api/v1/tasks/:id/file` | 下载上传文件 |
+| `GET` | `/api/v1/pcap/dirs` | 浏览 PCAP 目录 |
 | `WS` | `/api/v1/ws/tasks/:id` | WebSocket 实时推送 |
 
 ### curl 示例
@@ -257,10 +286,11 @@ go test ./... -v
 
 ## 注意事项
 
-1. 发包需要 root 权限或 `NET_RAW` capability，Docker 部署已配置 `NET_ADMIN` + `NET_RAW`
-2. 确保目标 DNS 服务器的 UDP 53 端口可达
-3. 高 QPS 发包会消耗大量 CPU 和网络带宽，请酌情使用
-4. 后端重启后，正在运行的任务将丢失（状态存储在内存中），需重新 Start
+1. Backend 使用 host 网络模式 + `NET_ADMIN` + `NET_RAW`，确保 raw socket 可绑定物理网卡
+2. CSV 模式使用标准 UDP socket，内核处理路由；PCAP 模式使用 AF_PACKET raw socket，直接发送以太网帧
+3. 确保目标 DNS 服务器的 UDP 53 端口可达
+4. 高 QPS 发包会消耗大量 CPU 和网络带宽，请酌情使用
+5. 后端重启后，正在运行的任务将丢失（状态存储在内存中），需重新 Start
 
 ## License
 

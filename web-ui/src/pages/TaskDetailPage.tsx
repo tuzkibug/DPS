@@ -43,11 +43,15 @@ export const TaskDetailPage: React.FC = () => {
           <Descriptions.Item label="Max Delay (ms)">{task.qos.delay_max_ms}</Descriptions.Item>
           <Descriptions.Item label="Duration (ms)">{task.duration_ms || '∞'}</Descriptions.Item>
           <Descriptions.Item label="Created At">{new Date(task.created_at).toLocaleString()}</Descriptions.Item>
-          <Descriptions.Item label="Uploaded File" span={2}>
+          <Descriptions.Item label="File" span={2}>
             {task.file_path ? (
-              <AntLink href={`${API_BASE}/tasks/${task.id}/file`} target="_blank">
-                {fileName}
-              </AntLink>
+              task.input_type === 'pcap' ? (
+                <span>{task.file_path}</span>
+              ) : (
+                <AntLink href={`${API_BASE}/tasks/${task.id}/file`} target="_blank">
+                  {fileName}
+                </AntLink>
+              )
             ) : (
               '-'
             )}

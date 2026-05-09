@@ -46,41 +46,67 @@ func (s *SQLiteStore) initSchema() error {
 		delay_max_ms INTEGER DEFAULT 0,
 		status TEXT DEFAULT 'pending',
 		created_at TEXT NOT NULL,
-		updated_at TEXT NOT NULL
+		updated_at TEXT NOT NULL,
+		last_run_at TEXT DEFAULT '',
+		total_run_ms INTEGER DEFAULT 0
 	);
 	`
-	_, err := s.db.Exec(schema)
-	return err
+	if _, err := s.db.Exec(schema); err != nil {
+		return err
+	}
+
+	// migrate existing tables lacking new columns
+	s.db.Exec("ALTER TABLE tasks ADD COLUMN last_run_at TEXT DEFAULT ''")
+	s.db.Exec("ALTER TABLE tasks ADD COLUMN total_run_ms INTEGER DEFAULT 0")
+	return nil
+}
+
+func parseTimePtr(s string) *time.Time {
+	if s == "" {
+		return nil
+	}
+	t, err := time.Parse(time.RFC3339, s)
+	if err != nil {
+		return nil
+	}
+	return &t
 }
 
 func (s *SQLiteStore) CreateTask(task *models.Task) error {
+	lastRunAt := ""
+	if task.LastRunAt != nil {
+		lastRunAt = task.LastRunAt.Format(time.RFC3339)
+	}
 	qos := task.QoS
 	_, err := s.db.Exec(`
 		INSERT INTO tasks (id, name, input_type, file_path, src_ip, dst_ip, src_mac, dst_mac,
-			start_time, duration_ms, target_qps, jitter, delay_min_ms, delay_max_ms, status, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			start_time, duration_ms, target_qps, jitter, delay_min_ms, delay_max_ms,
+			status, created_at, updated_at, last_run_at, total_run_ms)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		task.ID.String(), task.Name, task.InputType, task.FilePath,
 		task.SrcIP, task.DstIP, task.SrcMAC, task.DstMAC,
 		task.StartTime.Format(time.RFC3339), task.DurationMs,
 		qos.TargetQPS, qos.Jitter, qos.DelayMinMs, qos.DelayMaxMs,
-		task.Status, task.CreatedAt.Format(time.RFC3339), task.UpdatedAt.Format(time.RFC3339))
+		task.Status, task.CreatedAt.Format(time.RFC3339), task.UpdatedAt.Format(time.RFC3339),
+		lastRunAt, task.TotalRunMs)
 	return err
 }
 
 func (s *SQLiteStore) GetTask(id uuid.UUID) (*models.Task, error) {
 	row := s.db.QueryRow(`
 		SELECT id, name, input_type, file_path, src_ip, dst_ip, src_mac, dst_mac,
-			start_time, duration_ms, target_qps, jitter, delay_min_ms, delay_max_ms, status, created_at, updated_at
+			start_time, duration_ms, target_qps, jitter, delay_min_ms, delay_max_ms,
+			status, created_at, updated_at, last_run_at, total_run_ms
 		FROM tasks WHERE id = ?`, id.String())
 
 	var task models.Task
-	var startTimeStr, createdAtStr, updatedAtStr string
+	var startTimeStr, createdAtStr, updatedAtStr, lastRunAtStr string
 	err := row.Scan(
 		&task.ID, &task.Name, &task.InputType, &task.FilePath,
 		&task.SrcIP, &task.DstIP, &task.SrcMAC, &task.DstMAC,
 		&startTimeStr, &task.DurationMs,
 		&task.QoS.TargetQPS, &task.QoS.Jitter, &task.QoS.DelayMinMs, &task.QoS.DelayMaxMs,
-		&task.Status, &createdAtStr, &updatedAtStr)
+		&task.Status, &createdAtStr, &updatedAtStr, &lastRunAtStr, &task.TotalRunMs)
 
 	if err != nil {
 		return nil, err
@@ -91,6 +117,7 @@ func (s *SQLiteStore) GetTask(id uuid.UUID) (*models.Task, error) {
 	}
 	task.CreatedAt, _ = time.Parse(time.RFC3339, createdAtStr)
 	task.UpdatedAt, _ = time.Parse(time.RFC3339, updatedAtStr)
+	task.LastRunAt = parseTimePtr(lastRunAtStr)
 
 	task.ID, _ = uuid.Parse(task.ID.String())
 	return &task, nil
@@ -99,7 +126,8 @@ func (s *SQLiteStore) GetTask(id uuid.UUID) (*models.Task, error) {
 func (s *SQLiteStore) ListTasks() ([]*models.Task, error) {
 	rows, err := s.db.Query(`
 		SELECT id, name, input_type, file_path, src_ip, dst_ip, src_mac, dst_mac,
-			start_time, duration_ms, target_qps, jitter, delay_min_ms, delay_max_ms, status, created_at, updated_at
+			start_time, duration_ms, target_qps, jitter, delay_min_ms, delay_max_ms,
+			status, created_at, updated_at, last_run_at, total_run_ms
 		FROM tasks ORDER BY created_at DESC`)
 	if err != nil {
 		return nil, err
@@ -109,13 +137,13 @@ func (s *SQLiteStore) ListTasks() ([]*models.Task, error) {
 	tasks := make([]*models.Task, 0)
 	for rows.Next() {
 		var task models.Task
-		var startTimeStr, createdAtStr, updatedAtStr string
+		var startTimeStr, createdAtStr, updatedAtStr, lastRunAtStr string
 		err := rows.Scan(
 			&task.ID, &task.Name, &task.InputType, &task.FilePath,
 			&task.SrcIP, &task.DstIP, &task.SrcMAC, &task.DstMAC,
 			&startTimeStr, &task.DurationMs,
 			&task.QoS.TargetQPS, &task.QoS.Jitter, &task.QoS.DelayMinMs, &task.QoS.DelayMaxMs,
-			&task.Status, &createdAtStr, &updatedAtStr)
+			&task.Status, &createdAtStr, &updatedAtStr, &lastRunAtStr, &task.TotalRunMs)
 		if err != nil {
 			continue
 		}
@@ -124,6 +152,7 @@ func (s *SQLiteStore) ListTasks() ([]*models.Task, error) {
 		}
 		task.CreatedAt, _ = time.Parse(time.RFC3339, createdAtStr)
 		task.UpdatedAt, _ = time.Parse(time.RFC3339, updatedAtStr)
+		task.LastRunAt = parseTimePtr(lastRunAtStr)
 		task.ID, _ = uuid.Parse(task.ID.String())
 		tasks = append(tasks, &task)
 	}
@@ -131,15 +160,19 @@ func (s *SQLiteStore) ListTasks() ([]*models.Task, error) {
 }
 
 func (s *SQLiteStore) UpdateTask(task *models.Task) error {
+	lastRunAt := ""
+	if task.LastRunAt != nil {
+		lastRunAt = task.LastRunAt.Format(time.RFC3339)
+	}
 	qos := task.QoS
 	_, err := s.db.Exec(`
 		UPDATE tasks SET name=?, src_ip=?, dst_ip=?, src_mac=?, dst_mac=?,
 			start_time=?, duration_ms=?, target_qps=?, jitter=?, delay_min_ms=?, delay_max_ms=?,
-			status=?, updated_at=? WHERE id=?`,
+			status=?, updated_at=?, last_run_at=?, total_run_ms=? WHERE id=?`,
 		task.Name, task.SrcIP, task.DstIP, task.SrcMAC, task.DstMAC,
 		task.StartTime.Format(time.RFC3339), task.DurationMs,
 		qos.TargetQPS, qos.Jitter, qos.DelayMinMs, qos.DelayMaxMs,
-		task.Status, time.Now().Format(time.RFC3339), task.ID.String())
+		task.Status, time.Now().Format(time.RFC3339), lastRunAt, task.TotalRunMs, task.ID.String())
 	return err
 }
 

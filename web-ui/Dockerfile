@@ -9,7 +9,9 @@ RUN npm run build
 
 FROM nginx:alpine
 COPY --from=builder /app/dist /usr/share/nginx/html
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY nginx.conf.template /etc/nginx/conf.d/default.conf.template
 
-EXPOSE 3000
-CMD ["nginx", "-g", "daemon off;"]
+ENV FRONTEND_PORT=3000
+ENV BACKEND_PORT=8080
+
+CMD ["/bin/sh", "-c", "envsubst '${FRONTEND_PORT} ${BACKEND_PORT}' < /etc/nginx/conf.d/default.conf.template > /etc/nginx/conf.d/default.conf && nginx -g 'daemon off;'"]

@@ -1,8 +1,24 @@
 import React, { useEffect, useState } from 'react';
-import { Card, Button, Space, Popconfirm } from 'antd';
+import { Card, Button, Space, Popconfirm, message } from 'antd';
 import type { TaskStats } from '../api/types';
 import { useTaskStore } from '../stores/taskStore';
 import { WS_URL } from '../api';
+
+const fmtDate = (s: string | null | undefined) => {
+  if (!s) return '-';
+  return new Date(s).toLocaleString();
+};
+
+const fmtDuration = (ms: number) => {
+  if (ms <= 0) return '0s';
+  const totalSec = Math.floor(ms / 1000);
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  if (h > 0) return `${h}h ${m}m ${s}s`;
+  if (m > 0) return `${m}m ${s}s`;
+  return `${s}s`;
+};
 
 interface LiveMonitorProps {
   taskId: string;
@@ -36,8 +52,20 @@ export const LiveMonitor: React.FC<LiveMonitorProps> = ({ taskId, onDeleted }) =
     return () => ws.close();
   }, [taskId]);
 
-  const handleStart = () => startTask(taskId);
-  const handleStop = () => stopTask(taskId);
+  const handleStart = async () => {
+    try {
+      await startTask(taskId);
+    } catch (e) {
+      message.error((e as Error).message || 'Failed to start task');
+    }
+  };
+  const handleStop = async () => {
+    try {
+      await stopTask(taskId);
+    } catch (e) {
+      message.error((e as Error).message || 'Failed to stop task');
+    }
+  };
   const handleDelete = () => {
     deleteTask(taskId);
     onDeleted?.();
@@ -67,11 +95,7 @@ export const LiveMonitor: React.FC<LiveMonitorProps> = ({ taskId, onDeleted }) =
       }
     >
       {stats && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
-          <Card size="small">
-            <div style={{ fontSize: 24, fontWeight: 'bold' }}>{stats.sent_count}</div>
-            <div>Sent Packets</div>
-          </Card>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
           <Card size="small">
             <div style={{ fontSize: 24, fontWeight: 'bold' }}>{stats.current_qps.toFixed(2)}</div>
             <div>Current QPS</div>
@@ -81,8 +105,20 @@ export const LiveMonitor: React.FC<LiveMonitorProps> = ({ taskId, onDeleted }) =
             <div>Failed</div>
           </Card>
           <Card size="small">
-            <div style={{ fontSize: 24, fontWeight: 'bold' }}>{Math.floor(stats.elapsed_ms / 1000)}s</div>
-            <div>Elapsed</div>
+            <div style={{ fontSize: 24, fontWeight: 'bold' }}>{fmtDuration(stats.elapsed_ms)}</div>
+            <div>Current Run Time</div>
+          </Card>
+          <Card size="small">
+            <div style={{ fontSize: 14, fontWeight: 'bold' }}>{fmtDate(stats.created_at)}</div>
+            <div>Created</div>
+          </Card>
+          <Card size="small">
+            <div style={{ fontSize: 14, fontWeight: 'bold' }}>{fmtDate(stats.last_run_at)}</div>
+            <div>Last Run</div>
+          </Card>
+          <Card size="small">
+            <div style={{ fontSize: 24, fontWeight: 'bold' }}>{fmtDuration(stats.total_run_ms)}</div>
+            <div>Total Run Time</div>
           </Card>
         </div>
       )}

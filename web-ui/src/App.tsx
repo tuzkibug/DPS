@@ -13,7 +13,7 @@ const App: React.FC = () => {
       <Layout className="layout" style={{ minHeight: '100vh' }}>
         <Header>
           <div style={{ float: 'left', color: 'white', fontSize: 20, marginRight: 40 }}>
-            DNS Sender
+            DPS - DNS Packets Sender
           </div>
           <Menu theme="dark" mode="horizontal" defaultSelectedKeys={['tasks']}>
             <Menu.Item key="tasks">
