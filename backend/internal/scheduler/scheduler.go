@@ -216,6 +216,9 @@ func (s *TaskScheduler) UpdateTask(taskID uuid.UUID, req *models.UpdateTaskReque
 	if req.StartTime != nil {
 		task.StartTime = *req.StartTime
 	}
+	if req.FilePath != nil {
+		task.FilePath = *req.FilePath
+	}
 	if req.DurationMs != nil {
 		task.DurationMs = *req.DurationMs
 	}

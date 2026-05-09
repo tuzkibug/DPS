@@ -167,10 +167,10 @@ func (s *SQLiteStore) UpdateTask(task *models.Task) error {
 	qos := task.QoS
 	_, err := s.db.Exec(`
 		UPDATE tasks SET name=?, src_ip=?, dst_ip=?, src_mac=?, dst_mac=?,
-			start_time=?, duration_ms=?, target_qps=?, jitter=?, delay_min_ms=?, delay_max_ms=?,
+			file_path=?, start_time=?, duration_ms=?, target_qps=?, jitter=?, delay_min_ms=?, delay_max_ms=?,
 			status=?, updated_at=?, last_run_at=?, total_run_ms=? WHERE id=?`,
 		task.Name, task.SrcIP, task.DstIP, task.SrcMAC, task.DstMAC,
-		task.StartTime.Format(time.RFC3339), task.DurationMs,
+		task.FilePath, task.StartTime.Format(time.RFC3339), task.DurationMs,
 		qos.TargetQPS, qos.Jitter, qos.DelayMinMs, qos.DelayMaxMs,
 		task.Status, time.Now().Format(time.RFC3339), lastRunAt, task.TotalRunMs, task.ID.String())
 	return err

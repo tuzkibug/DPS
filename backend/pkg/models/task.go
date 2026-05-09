@@ -83,6 +83,7 @@ type UpdateTaskRequest struct {
 	DstIP       *string    `json:"dst_ip"`
 	SrcMAC      *string    `json:"src_mac"`
 	DstMAC      *string    `json:"dst_mac"`
+	FilePath    *string    `json:"file_path"`
 	StartTime   *time.Time `json:"start_time"`
 	DurationMs  *int       `json:"duration_ms"`
 	QoS         *QoSConfig `json:"qos"`

@@ -65,6 +65,7 @@ export interface UpdateTaskRequest {
   dst_ip?: string;
   src_mac?: string;
   dst_mac?: string;
+  file_path?: string;
   start_time?: string;
   duration_ms?: number;
   qos?: QoSConfig;

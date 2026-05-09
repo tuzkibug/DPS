@@ -1,7 +1,9 @@
 package api
 
 import (
+	"log"
 	"net/http"
+	"time"
 
 	"dns-sender/internal/scheduler"
 	"dns-sender/pkg/models"
@@ -15,8 +17,6 @@ var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
 		return true
 	},
-	ReadBufferSize:  1024,
-	WriteBufferSize: 1024,
 }
 
 type WSHandler struct {
@@ -40,21 +40,51 @@ func (h *WSHandler) HandleTaskWS(c *gin.Context) {
 	}
 	defer conn.Close()
 
-	stats, err := h.scheduler.GetStats(taskID)
-	if err == nil {
-		msg := models.WSMessage{
-			Type: "stats",
-			Data: stats,
-		}
-		conn.WriteJSON(msg)
-	}
+	// Push initial state
+	h.pushStats(conn, taskID)
+	h.pushStatus(conn, taskID)
 
-	status, _ := h.scheduler.GetTaskStatus(taskID)
-	if status != "" {
-		msg := models.WSMessage{
-			Type: "status_change",
-			Data: map[string]interface{}{"status": status},
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for {
+			if _, _, err := conn.ReadMessage(); err != nil {
+				return
+			}
 		}
-		conn.WriteJSON(msg)
+	}()
+
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-done:
+			return
+		case <-ticker.C:
+			h.pushStats(conn, taskID)
+		}
+	}
+}
+
+func (h *WSHandler) pushStats(conn *websocket.Conn, taskID uuid.UUID) {
+	stats, err := h.scheduler.GetStats(taskID)
+	if err != nil {
+		return
+	}
+	msg := models.WSMessage{Type: "stats", Data: stats}
+	if err := conn.WriteJSON(msg); err != nil {
+		log.Printf("ws write stats error: %v", err)
+	}
+}
+
+func (h *WSHandler) pushStatus(conn *websocket.Conn, taskID uuid.UUID) {
+	status, err := h.scheduler.GetTaskStatus(taskID)
+	if err != nil || status == "" {
+		return
+	}
+	msg := models.WSMessage{Type: "status_change", Data: map[string]interface{}{"status": status}}
+	if err := conn.WriteJSON(msg); err != nil {
+		log.Printf("ws write status error: %v", err)
 	}
 }

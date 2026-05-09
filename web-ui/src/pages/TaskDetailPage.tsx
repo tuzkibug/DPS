@@ -1,8 +1,9 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { LiveMonitor } from '../components/LiveMonitor';
+import { EditTaskModal } from '../components/EditTaskModal';
 import { useParams } from 'react-router-dom';
 import { useTaskStore } from '../stores/taskStore';
-import { Spin, Descriptions, Card, Typography } from 'antd';
+import { Spin, Descriptions, Card, Typography, Button } from 'antd';
 
 const { Link: AntLink } = Typography;
 
@@ -11,6 +12,7 @@ const API_BASE = '/api/v1';
 export const TaskDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const { currentTask, fetchTask, loading } = useTaskStore();
+  const [editOpen, setEditOpen] = useState(false);
 
   useEffect(() => {
     if (id) fetchTask(id);
@@ -22,12 +24,16 @@ export const TaskDetailPage: React.FC = () => {
 
   const task = currentTask;
   const fileName = task.file_path ? task.file_path.split('/').pop() : '-';
+  const canEdit = task.status !== 'running';
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
       <LiveMonitor taskId={id!} />
 
-      <Card title="Task Configuration">
+      <Card
+        title="Task Configuration"
+        extra={canEdit ? <Button onClick={() => setEditOpen(true)}>Edit</Button> : null}
+      >
         <Descriptions bordered column={2} size="small">
           <Descriptions.Item label="Task ID">{task.id}</Descriptions.Item>
           <Descriptions.Item label="Name">{task.name}</Descriptions.Item>
@@ -58,6 +64,12 @@ export const TaskDetailPage: React.FC = () => {
           </Descriptions.Item>
         </Descriptions>
       </Card>
+
+      <EditTaskModal
+        task={task}
+        open={editOpen}
+        onClose={() => setEditOpen(false)}
+      />
     </div>
   );
 };
