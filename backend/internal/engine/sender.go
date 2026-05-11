@@ -103,8 +103,11 @@ func (s *PacketSender) run(ctx context.Context, taskID uuid.UUID, statsChan chan
 			}
 			sentCount = 0
 		default:
-			s.sendPacket()
-			sentCount++
+			batch := s.qos.BatchSize()
+			for i := 0; i < batch; i++ {
+				s.sendPacket()
+				sentCount++
+			}
 			s.qos.Wait()
 		}
 	}
@@ -222,20 +225,23 @@ func (p *PCAPSender) run(ctx context.Context, taskID uuid.UUID, statsChan chan<-
 			}
 			sentCount = 0
 		default:
-			grp := p.groups[p.curGroup]
-			if len(grp.Packets) > 0 {
-				if err := WriteRaw(p.sockfd, grp.Packets[p.curPkt]); err != nil {
-					return
+			batch := p.qos.BatchSize()
+			for i := 0; i < batch; i++ {
+				grp := p.groups[p.curGroup]
+				if len(grp.Packets) > 0 {
+					if err := WriteRaw(p.sockfd, grp.Packets[p.curPkt]); err != nil {
+						return
+					}
+					sentCount++
 				}
-				sentCount++
-			}
 
-			p.curPkt++
-			if p.curPkt >= len(grp.Packets) {
-				p.curPkt = 0
-				p.curGroup++
-				if p.curGroup >= len(p.groups) {
-					p.curGroup = 0
+				p.curPkt++
+				if p.curPkt >= len(grp.Packets) {
+					p.curPkt = 0
+					p.curGroup++
+					if p.curGroup >= len(p.groups) {
+						p.curGroup = 0
+					}
 				}
 			}
 			p.qos.Wait()

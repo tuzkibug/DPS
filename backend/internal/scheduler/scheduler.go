@@ -13,11 +13,21 @@ import (
 	"github.com/google/uuid"
 )
 
+type RedisOps interface {
+	SetTaskStatus(ctx context.Context, taskID uuid.UUID, status models.TaskStatus) error
+	GetTaskStatus(ctx context.Context, taskID uuid.UUID) (models.TaskStatus, error)
+	SetTaskStats(ctx context.Context, stats *models.TaskStats) error
+	GetTaskStats(ctx context.Context, taskID uuid.UUID) (*models.TaskStats, error)
+	SetStartTime(ctx context.Context, taskID uuid.UUID, t time.Time) error
+	GetStartTime(ctx context.Context, taskID uuid.UUID) (time.Time, error)
+	ClearTaskData(ctx context.Context, taskID uuid.UUID) error
+}
+
 type TaskScheduler struct {
 	tasks    map[uuid.UUID]*TaskInfo
 	mu       sync.RWMutex
 	sqlite   *store.SQLiteStore
-	redis    *store.RedisStore
+	redis    RedisOps
 }
 
 type TaskInfo struct {
@@ -30,7 +40,7 @@ type TaskInfo struct {
 	StatsChan chan *models.TaskStats
 }
 
-func NewTaskScheduler(sqlite *store.SQLiteStore, redis *store.RedisStore) *TaskScheduler {
+func NewTaskScheduler(sqlite *store.SQLiteStore, redis RedisOps) *TaskScheduler {
 	return &TaskScheduler{
 		tasks:  make(map[uuid.UUID]*TaskInfo),
 		sqlite: sqlite,

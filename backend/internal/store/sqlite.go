@@ -55,9 +55,47 @@ func (s *SQLiteStore) initSchema() error {
 		return err
 	}
 
-	// migrate existing tables lacking new columns
-	s.db.Exec("ALTER TABLE tasks ADD COLUMN last_run_at TEXT DEFAULT ''")
-	s.db.Exec("ALTER TABLE tasks ADD COLUMN total_run_ms INTEGER DEFAULT 0")
+	if err := s.migrateSchema(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *SQLiteStore) migrateSchema() error {
+	rows, err := s.db.Query("PRAGMA table_info(tasks)")
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	existing := make(map[string]bool)
+	for rows.Next() {
+		var cid int
+		var name, colType string
+		var notNull int
+		var dfltValue *string
+		var pk int
+		if err := rows.Scan(&cid, &name, &colType, &notNull, &dfltValue, &pk); err != nil {
+			return err
+		}
+		existing[name] = true
+	}
+
+	migrations := []struct {
+		col string
+		sql string
+	}{
+		{"last_run_at", "ALTER TABLE tasks ADD COLUMN last_run_at TEXT DEFAULT ''"},
+		{"total_run_ms", "ALTER TABLE tasks ADD COLUMN total_run_ms INTEGER DEFAULT 0"},
+	}
+
+	for _, m := range migrations {
+		if !existing[m.col] {
+			if _, err := s.db.Exec(m.sql); err != nil {
+				return err
+			}
+		}
+	}
 	return nil
 }
 

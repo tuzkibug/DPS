@@ -1,12 +1,14 @@
 package store
 
 import (
+	"database/sql"
 	"os"
 	"testing"
 	"time"
 
 	"dns-sender/pkg/models"
 
+	_ "github.com/mattn/go-sqlite3"
 	"github.com/google/uuid"
 )
 
@@ -181,5 +183,135 @@ func TestSQLiteStore_GetNonExistentTask(t *testing.T) {
 	_, err := store.GetTask(uuid.New())
 	if err == nil {
 		t.Error("Expected error for non-existent task, got nil")
+	}
+}
+
+func TestSchemaMigration_FreshInstall(t *testing.T) {
+	store, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	// Verify all expected columns exist after fresh init
+	rows, err := store.db.Query("PRAGMA table_info(tasks)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+
+	columns := make(map[string]bool)
+	for rows.Next() {
+		var cid int
+		var name, colType string
+		var notNull int
+		var dfltValue *string
+		var pk int
+		if err := rows.Scan(&cid, &name, &colType, &notNull, &dfltValue, &pk); err != nil {
+			t.Fatal(err)
+		}
+		columns[name] = true
+	}
+
+	expected := []string{"id", "name", "input_type", "file_path", "src_ip", "dst_ip",
+		"src_mac", "dst_mac", "target_qps", "jitter", "delay_min_ms", "delay_max_ms",
+		"status", "created_at", "updated_at", "last_run_at", "total_run_ms"}
+	for _, col := range expected {
+		if !columns[col] {
+			t.Errorf("column %q missing after fresh install", col)
+		}
+	}
+}
+
+func TestSchemaMigration_Idempotent(t *testing.T) {
+	store, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	// Running migration again should be safe (idempotent)
+	if err := store.migrateSchema(); err != nil {
+		t.Fatalf("Second migrateSchema failed: %v", err)
+	}
+	// Third time too
+	if err := store.migrateSchema(); err != nil {
+		t.Fatalf("Third migrateSchema failed: %v", err)
+	}
+}
+
+func TestSchemaMigration_UpgradeFromOldSchema(t *testing.T) {
+	tmpfile, err := os.CreateTemp("", "test-old.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tmpfile.Close()
+	defer os.Remove(tmpfile.Name())
+
+	db, err := sql.Open("sqlite3", tmpfile.Name())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	// Create old schema without last_run_at and total_run_ms
+	oldSchema := `
+	CREATE TABLE tasks (
+		id TEXT PRIMARY KEY,
+		name TEXT NOT NULL,
+		input_type TEXT NOT NULL,
+		file_path TEXT NOT NULL,
+		src_ip TEXT NOT NULL,
+		dst_ip TEXT NOT NULL,
+		src_mac TEXT NOT NULL,
+		dst_mac TEXT NOT NULL,
+		start_time TEXT,
+		duration_ms INTEGER DEFAULT 0,
+		target_qps INTEGER DEFAULT 100,
+		jitter REAL DEFAULT 0,
+		delay_min_ms INTEGER DEFAULT 0,
+		delay_max_ms INTEGER DEFAULT 0,
+		status TEXT DEFAULT 'pending',
+		created_at TEXT NOT NULL,
+		updated_at TEXT NOT NULL
+	);
+	`
+	if _, err := db.Exec(oldSchema); err != nil {
+		t.Fatal(err)
+	}
+
+	store := &SQLiteStore{db: db}
+	if err := store.migrateSchema(); err != nil {
+		t.Fatalf("migrateSchema failed: %v", err)
+	}
+
+	// Verify columns were added
+	rows, err := db.Query("PRAGMA table_info(tasks)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+
+	columns := make(map[string]bool)
+	for rows.Next() {
+		var cid int
+		var name, colType string
+		var notNull int
+		var dfltValue *string
+		var pk int
+		rows.Scan(&cid, &name, &colType, &notNull, &dfltValue, &pk)
+		columns[name] = true
+	}
+
+	if !columns["last_run_at"] {
+		t.Error("last_run_at column was not added by migration")
+	}
+	if !columns["total_run_ms"] {
+		t.Error("total_run_ms column was not added by migration")
+	}
+
+	// Should be able to INSERT/query with new columns
+	_, err = db.Exec(`INSERT INTO tasks (id, name, input_type, file_path, src_ip, dst_ip, src_mac, dst_mac,
+		status, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		"test-id", "test", "csv", "/f.csv", "1.1.1.1", "2.2.2.2",
+		"aa:bb:cc:dd:ee:ff", "11:22:33:44:55:66", "pending",
+		time.Now().Format(time.RFC3339), time.Now().Format(time.RFC3339))
+	if err != nil {
+		t.Fatalf("INSERT after migration failed: %v", err)
 	}
 }

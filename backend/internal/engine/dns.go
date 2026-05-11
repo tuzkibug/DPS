@@ -102,6 +102,7 @@ type QoSController struct {
 	jitter    float64
 	delayMin  time.Duration
 	delayMax  time.Duration
+	batchSize int
 }
 
 func NewQoSController(cfg models.QoSConfig) *QoSController {
@@ -109,38 +110,51 @@ func NewQoSController(cfg models.QoSConfig) *QoSController {
 		cfg.TargetQPS = 100
 	}
 
+	interval := time.Second / time.Duration(cfg.TargetQPS)
+	batchSize := 1
+	if interval < time.Millisecond {
+		batchSize = int(time.Millisecond / interval)
+		if batchSize < 1 {
+			batchSize = 1
+		}
+	}
+
 	return &QoSController{
 		targetQPS: cfg.TargetQPS,
 		jitter:    cfg.Jitter,
 		delayMin:  time.Duration(cfg.DelayMinMs) * time.Millisecond,
 		delayMax:  time.Duration(cfg.DelayMaxMs) * time.Millisecond,
+		batchSize: batchSize,
 	}
 }
 
-func (q *QoSController) Wait() {
-	baseInterval := time.Second / time.Duration(q.targetQPS)
+func (q *QoSController) BatchSize() int {
+	return q.batchSize
+}
 
-	// jitter: +/- jitter% variation around the base interval
-	// e.g. QPS=100 (10ms), jitter=0.1 => interval varies 9~11ms
+func (q *QoSController) Wait() {
+	batchInterval := time.Second / time.Duration(q.targetQPS) * time.Duration(q.batchSize)
+
 	if q.jitter > 0 {
-		jitterRange := time.Duration(float64(baseInterval) * q.jitter)
+		jitterRange := time.Duration(float64(batchInterval) * q.jitter)
 		if jitterRange > 0 {
 			offset := time.Duration(rand.Int63n(int64(jitterRange*2+1))) - jitterRange
-			baseInterval += offset
+			batchInterval += offset
 		}
 	}
-	if baseInterval < 0 {
-		baseInterval = 0
+	if batchInterval < 0 {
+		batchInterval = 0
 	}
-	time.Sleep(baseInterval)
+	time.Sleep(batchInterval)
 
-	// extra per-packet delay (e.g. simulating network latency)
 	if q.delayMax > 0 {
-		delay := q.delayMin
-		if q.delayMax > q.delayMin {
-			delay += time.Duration(rand.Int63n(int64(q.delayMax - q.delayMin)))
+		for i := 0; i < q.batchSize; i++ {
+			delay := q.delayMin
+			if q.delayMax > q.delayMin {
+				delay += time.Duration(rand.Int63n(int64(q.delayMax - q.delayMin)))
+			}
+			time.Sleep(delay)
 		}
-		time.Sleep(delay)
 	}
 }
 
@@ -210,8 +224,24 @@ func BuildUDPPacket(srcPort, dstPort uint16, payload []byte) []byte {
 var srcIP, dstIP string
 
 func udpChecksum(src, dst string, data []byte) uint16 {
-	// Simplified - in production use proper checksum
-	return 0
+	srcIP := net.ParseIP(src)
+	dstIP := net.ParseIP(dst)
+	if srcIP == nil || dstIP == nil {
+		return 0
+	}
+	src4 := srcIP.To4()
+	dst4 := dstIP.To4()
+	if src4 == nil || dst4 == nil {
+		return 0
+	}
+
+	pseudo := make([]byte, 12)
+	copy(pseudo[0:4], src4)
+	copy(pseudo[4:8], dst4)
+	pseudo[9] = 17 // protocol UDP
+	binary.BigEndian.PutUint16(pseudo[10:12], uint16(len(data)))
+
+	return checksum(append(pseudo, data...))
 }
 
 func ParseMAC(macStr string) (net.HardwareAddr, error) {

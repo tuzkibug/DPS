@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"encoding/binary"
 	"testing"
 
 	"dns-sender/pkg/models"
@@ -143,6 +144,28 @@ func TestNewQoSControllerZeroQPS(t *testing.T) {
 	}
 }
 
+func TestNewQoSControllerBatchSize(t *testing.T) {
+	tests := []struct {
+		qps       int
+		wantBatch int
+	}{
+		{100, 1},
+		{1000, 1},
+		{2000, 2},  // interval=0.5ms, batch=2
+		{10000, 10},
+		{20000, 20},
+		{100000, 100},
+	}
+
+	for _, tt := range tests {
+		cfg := models.QoSConfig{TargetQPS: tt.qps}
+		qos := NewQoSController(cfg)
+		if qos.BatchSize() != tt.wantBatch {
+			t.Errorf("QPS=%d: BatchSize()=%d, want %d", tt.qps, qos.BatchSize(), tt.wantBatch)
+		}
+	}
+}
+
 func TestChecksum(t *testing.T) {
 	header := make([]byte, 20)
 	header[0] = 0x45
@@ -182,5 +205,54 @@ func TestParseMAC(t *testing.T) {
 		if (err != nil) != tt.wantErr {
 			t.Errorf("ParseMAC(%q) error = %v, wantErr %v", tt.input, err, tt.wantErr)
 		}
+	}
+}
+
+func TestUDPChecksum(t *testing.T) {
+	payload := []byte{0x00, 0x01, 0x02, 0x03}
+	sum := udpChecksum("192.168.1.1", "192.168.1.2", payload)
+	// A proper checksum over real data should never be zero
+	if sum == 0 {
+		t.Error("udpChecksum returned 0, expected non-zero checksum")
+	}
+}
+
+func TestUDPChecksumConsistency(t *testing.T) {
+	data := []byte{0x00, 0x35, 0x00, 0x35, 0x00, 0x20, 0x00, 0x00}
+	data = append(data, make([]byte, 24)...)
+
+	sum1 := udpChecksum("10.0.0.1", "10.0.0.2", data)
+	sum2 := udpChecksum("10.0.0.1", "10.0.0.2", data)
+	if sum1 != sum2 {
+		t.Errorf("udpChecksum not consistent: %d vs %d", sum1, sum2)
+	}
+	if sum1 == 0 {
+		t.Error("udpChecksum returned 0 for real DNS-like data")
+	}
+}
+
+func TestUDPChecksumInvalidIP(t *testing.T) {
+	sum := udpChecksum("bad", "192.168.1.1", []byte{1, 2, 3})
+	if sum != 0 {
+		t.Errorf("udpChecksum with invalid IP: got %d, want 0", sum)
+	}
+}
+
+func TestBuildUDPPacketChecksumNonZero(t *testing.T) {
+	prevSrc, prevDst := srcIP, dstIP
+	srcIP, dstIP = "192.168.1.1", "8.8.8.8"
+	defer func() { srcIP, dstIP = prevSrc, prevDst }()
+
+	payload := []byte{
+		0x12, 0x34, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x07, 0x65, 0x78, 0x61,
+		0x6d, 0x70, 0x6c, 0x65, 0x03, 0x63, 0x6f, 0x6d,
+		0x00, 0x00, 0x01, 0x00, 0x01,
+	}
+	pkt := BuildUDPPacket(1234, 53, payload)
+	// checksum is at bytes 6-7 of UDP header
+	cs := binary.BigEndian.Uint16(pkt[6:8])
+	if cs == 0 {
+		t.Error("BuildUDPPacket produced zero checksum")
 	}
 }
