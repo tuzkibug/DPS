@@ -28,7 +28,6 @@ type QoSConfig struct {
 	Jitter       float64 `json:"jitter"`        // 抖动比例 0.0-1.0
 	DelayMinMs   int     `json:"delay_min_ms"`  // 最小延迟(毫秒)
 	DelayMaxMs   int     `json:"delay_max_ms"`  // 最大延迟(毫秒)
-	burstSize    int     `json:"burst_size"`    //  burst size
 }
 
 type Task struct {

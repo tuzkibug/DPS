@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"context"
+	"log"
 	"os"
 	"sync"
 	"time"
@@ -53,13 +54,18 @@ func NewTaskScheduler(sqlite *store.SQLiteStore, redis RedisOps) *TaskScheduler 
 func (s *TaskScheduler) recoverTasks() {
 	tasks, err := s.sqlite.ListTasks()
 	if err != nil {
+		log.Printf("recoverTasks: failed to list tasks: %v", err)
 		return
 	}
 	for _, task := range tasks {
 		if task.Status == models.TaskStatusRunning {
+			log.Printf("recoverTasks: recovering task %s (%s)", task.ID, task.Name)
 			if err := s.StartTask(task); err != nil {
+				log.Printf("recoverTasks: failed to recover task %s: %v", task.ID, err)
 				task.Status = models.TaskStatusPending
-				s.sqlite.UpdateTask(task)
+				if uerr := s.sqlite.UpdateTask(task); uerr != nil {
+					log.Printf("recoverTasks: failed to update task %s status: %v", task.ID, uerr)
+				}
 				s.redis.SetTaskStatus(context.Background(), task.ID, models.TaskStatusPending)
 			}
 		}
@@ -139,13 +145,18 @@ func (s *TaskScheduler) StopTask(taskID uuid.UUID) error {
 
 	task, err := s.sqlite.GetTask(taskID)
 	if err == nil {
-		startTime, _ := s.redis.GetStartTime(context.Background(), taskID)
+		startTime, err := s.redis.GetStartTime(context.Background(), taskID)
+		if err != nil {
+			log.Printf("StopTask: failed to get start time for task %s: %v", taskID, err)
+		}
 		if !startTime.IsZero() {
 			elapsed := time.Since(startTime).Milliseconds()
 			task.TotalRunMs += elapsed
 		}
 		task.Status = models.TaskStatusPending
 		s.sqlite.UpdateTask(task)
+	} else {
+		log.Printf("StopTask: failed to get task %s from sqlite: %v", taskID, err)
 	}
 	s.redis.SetTaskStatus(context.Background(), taskID, models.TaskStatusPending)
 
@@ -162,7 +173,9 @@ func (s *TaskScheduler) GetStats(taskID uuid.UUID) (*models.TaskStats, error) {
 
 func (s *TaskScheduler) watchStats(taskID uuid.UUID, statsChan chan *models.TaskStats) {
 	for stats := range statsChan {
-		s.redis.SetTaskStats(context.Background(), stats)
+		if err := s.redis.SetTaskStats(context.Background(), stats); err != nil {
+			log.Printf("watchStats: failed to set stats for task %s: %v", taskID, err)
+		}
 	}
 }
 

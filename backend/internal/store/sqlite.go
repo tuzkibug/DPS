@@ -80,6 +80,9 @@ func (s *SQLiteStore) migrateSchema() error {
 		}
 		existing[name] = true
 	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
 
 	migrations := []struct {
 		col string
@@ -193,6 +196,9 @@ func (s *SQLiteStore) ListTasks() ([]*models.Task, error) {
 		task.LastRunAt = parseTimePtr(lastRunAtStr)
 		task.ID, _ = uuid.Parse(task.ID.String())
 		tasks = append(tasks, &task)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 	return tasks, nil
 }
