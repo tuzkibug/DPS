@@ -3,6 +3,7 @@ package api
 import (
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"dns-sender/internal/scheduler"
@@ -13,18 +14,29 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-var upgrader = websocket.Upgrader{
-	CheckOrigin: func(r *http.Request) bool {
-		return true
-	},
-}
-
 type WSHandler struct {
 	scheduler *scheduler.TaskScheduler
+	upgrader  websocket.Upgrader
 }
 
-func NewWSHandler(sched *scheduler.TaskScheduler) *WSHandler {
-	return &WSHandler{scheduler: sched}
+func NewWSHandler(sched *scheduler.TaskScheduler, allowedOrigins []string) *WSHandler {
+	return &WSHandler{
+		scheduler: sched,
+		upgrader: websocket.Upgrader{
+			CheckOrigin: func(r *http.Request) bool {
+				origin := r.Header.Get("Origin")
+				if origin == "" {
+					return true // allow non-browser clients
+				}
+				for _, allowed := range allowedOrigins {
+					if strings.EqualFold(origin, allowed) {
+						return true
+					}
+				}
+				return false
+			},
+		},
+	}
 }
 
 func (h *WSHandler) HandleTaskWS(c *gin.Context) {
@@ -34,7 +46,7 @@ func (h *WSHandler) HandleTaskWS(c *gin.Context) {
 		return
 	}
 
-	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
+	conn, err := h.upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		return
 	}

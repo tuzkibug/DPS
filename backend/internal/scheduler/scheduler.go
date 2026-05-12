@@ -41,10 +41,28 @@ type TaskInfo struct {
 }
 
 func NewTaskScheduler(sqlite *store.SQLiteStore, redis RedisOps) *TaskScheduler {
-	return &TaskScheduler{
+	s := &TaskScheduler{
 		tasks:  make(map[uuid.UUID]*TaskInfo),
 		sqlite: sqlite,
 		redis:  redis,
+	}
+	s.recoverTasks()
+	return s
+}
+
+func (s *TaskScheduler) recoverTasks() {
+	tasks, err := s.sqlite.ListTasks()
+	if err != nil {
+		return
+	}
+	for _, task := range tasks {
+		if task.Status == models.TaskStatusRunning {
+			if err := s.StartTask(task); err != nil {
+				task.Status = models.TaskStatusPending
+				s.sqlite.UpdateTask(task)
+				s.redis.SetTaskStatus(context.Background(), task.ID, models.TaskStatusPending)
+			}
+		}
 	}
 }
 

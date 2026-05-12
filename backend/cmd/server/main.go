@@ -17,6 +17,7 @@ func main() {
 	uploadDir := getEnv("UPLOAD_DIR", "./uploads")
 	pcapDir := getEnv("PCAP_DIR", "./pcap")
 	port := getEnv("PORT", "8080")
+	frontendPort := getEnv("FRONTEND_PORT", "3000")
 
 	if err := os.MkdirAll(uploadDir, 0755); err != nil {
 		log.Fatalf("failed to create upload dir: %v", err)
@@ -36,7 +37,12 @@ func main() {
 
 	sched := scheduler.NewTaskScheduler(sqliteStore, redisStore)
 	taskHandler := taskhandler.NewTaskHandler(sched, uploadDir, pcapDir)
-	wsHandler := taskhandler.NewWSHandler(sched)
+
+	allowedOrigins := []string{
+		"http://localhost:" + frontendPort,
+		"http://127.0.0.1:" + frontendPort,
+	}
+	wsHandler := taskhandler.NewWSHandler(sched, allowedOrigins)
 
 	r := gin.Default()
 

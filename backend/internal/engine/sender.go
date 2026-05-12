@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"fmt"
+	"math/rand/v2"
 	"net"
 	"sync"
 	"time"
@@ -117,13 +118,16 @@ func (s *PacketSender) sendPacket() error {
 	if len(s.domains) == 0 {
 		return fmt.Errorf("no domains available")
 	}
-	domain := s.domains[time.Now().UnixNano()%int64(len(s.domains))]
-	txID := uint16(time.Now().UnixNano() & 0xFFFF)
+	domain := s.domains[rand.IntN(len(s.domains))]
+	txID := uint16(rand.Uint32())
 
-	dnsQuery := BuildDNSQuery(domain, txID)
+	dnsQuery, err := BuildDNSQuery(domain, txID)
+	if err != nil {
+		return err
+	}
 
 	dstAddr := net.UDPAddr{IP: s.dstIP, Port: 53}
-	_, err := s.conn.WriteTo(dnsQuery, &dstAddr)
+	_, err = s.conn.WriteTo(dnsQuery, &dstAddr)
 	return err
 }
 
@@ -247,10 +251,6 @@ func (p *PCAPSender) run(ctx context.Context, taskID uuid.UUID, statsChan chan<-
 			p.qos.Wait()
 		}
 	}
-}
-
-func (p *PCAPSender) ReadPCAPFile(file string) ([][]byte, error) {
-	return nil, fmt.Errorf("PCAP reading not implemented")
 }
 
 func (p *PCAPSender) sendPacket(packetData []byte) error {

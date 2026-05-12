@@ -8,7 +8,10 @@ import (
 )
 
 func TestBuildDNSQuery(t *testing.T) {
-	query := BuildDNSQuery("example.com", 0x1234)
+	query, err := BuildDNSQuery("example.com", 0x1234)
+	if err != nil {
+		t.Fatalf("BuildDNSQuery failed: %v", err)
+	}
 
 	if len(query) < 16 {
 		t.Fatalf("DNS query too short: got %d bytes", len(query))
@@ -34,7 +37,11 @@ func TestParseDomain(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		result := parseDomain(tt.domain)
+		result, err := parseDomain(tt.domain)
+		if err != nil {
+			t.Errorf("parseDomain(%q) unexpected error: %v", tt.domain, err)
+			continue
+		}
 		if len(result) != tt.wantLen {
 			t.Errorf("parseDomain(%q) length = %d, want %d", tt.domain, len(result), tt.wantLen)
 		}
@@ -113,6 +120,53 @@ func TestParseCSVDomainsEmpty(t *testing.T) {
 		if len(domains) != tt.want {
 			t.Errorf("ParseCSVDomains(%q) returned %d domains, want %d", tt.content, len(domains), tt.want)
 		}
+	}
+}
+
+func TestParseCSVDomainsWithEscapedQuotes(t *testing.T) {
+	content := `"domain""with""quotes".com
+"hello ""world"""
+normal.com
+`
+	domains := ParseCSVDomains(content)
+
+	if len(domains) != 3 {
+		t.Fatalf("Expected 3 domains, got %d", len(domains))
+	}
+	if domains[0] != `domain"with"quotes.com` {
+		t.Errorf("First domain = %q", domains[0])
+	}
+	if domains[1] != `hello "world"` {
+		t.Errorf("Second domain = %q", domains[1])
+	}
+	if domains[2] != "normal.com" {
+		t.Errorf("Third domain = %q", domains[2])
+	}
+}
+
+func TestParseDomainInvalidLabelLength(t *testing.T) {
+	longLabel := make([]byte, 64)
+	for i := range longLabel {
+		longLabel[i] = 'a'
+	}
+	_, err := parseDomain(string(longLabel))
+	if err == nil {
+		t.Error("expected error for 64-char label, got nil")
+	}
+}
+
+func TestParseDomainInvalidTotalLength(t *testing.T) {
+	// 64 labels × 4 chars each = 256 chars (exceeds 253)
+	domain := ""
+	for i := 0; i < 64; i++ {
+		if i > 0 {
+			domain += "."
+		}
+		domain += "abcd"
+	}
+	_, err := parseDomain(domain)
+	if err == nil {
+		t.Error("expected error for domain exceeding 253 chars, got nil")
 	}
 }
 
@@ -239,17 +293,13 @@ func TestUDPChecksumInvalidIP(t *testing.T) {
 }
 
 func TestBuildUDPPacketChecksumNonZero(t *testing.T) {
-	prevSrc, prevDst := srcIP, dstIP
-	srcIP, dstIP = "192.168.1.1", "8.8.8.8"
-	defer func() { srcIP, dstIP = prevSrc, prevDst }()
-
 	payload := []byte{
 		0x12, 0x34, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00,
 		0x00, 0x00, 0x00, 0x00, 0x07, 0x65, 0x78, 0x61,
 		0x6d, 0x70, 0x6c, 0x65, 0x03, 0x63, 0x6f, 0x6d,
 		0x00, 0x00, 0x01, 0x00, 0x01,
 	}
-	pkt := BuildUDPPacket(1234, 53, payload)
+	pkt := BuildUDPPacket(1234, 53, "192.168.1.1", "8.8.8.8", payload)
 	// checksum is at bytes 6-7 of UDP header
 	cs := binary.BigEndian.Uint16(pkt[6:8])
 	if cs == 0 {

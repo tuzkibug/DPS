@@ -32,11 +32,3 @@ func TestHtonsRoundtrip(t *testing.T) {
 		}
 	}
 }
-
-func TestReadPCAPFile_NotImplemented(t *testing.T) {
-	sender := &PCAPSender{}
-	_, err := sender.ReadPCAPFile("test.pcap")
-	if err == nil {
-		t.Error("expected error for unimplemented ReadPCAPFile, got nil")
-	}
-}

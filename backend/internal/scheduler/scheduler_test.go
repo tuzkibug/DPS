@@ -283,6 +283,62 @@ func TestScheduler_StopTask_NotRunning(t *testing.T) {
 	}
 }
 
+func TestScheduler_RecoverTasks(t *testing.T) {
+	tmpfile, err := os.CreateTemp("", "test-recover.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tmpfile.Close()
+	dbPath := tmpfile.Name()
+	defer os.Remove(dbPath)
+
+	sqlite1, err := store.NewSQLiteStore(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	req := makeCreateReq()
+	taskID := uuid.New()
+	err = sqlite1.CreateTask(&models.Task{
+		ID:        taskID,
+		Name:      req.Name,
+		InputType: req.InputType,
+		FilePath:  "/tmp/test.csv",
+		SrcIP:     req.SrcIP,
+		DstIP:     req.DstIP,
+		SrcMAC:    req.SrcMAC,
+		DstMAC:    req.DstMAC,
+		QoS:       req.QoS,
+		Status:    models.TaskStatusRunning,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	})
+	if err != nil {
+		sqlite1.Close()
+		t.Fatal(err)
+	}
+	sqlite1.Close()
+
+	sqlite2, err := store.NewSQLiteStore(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sqlite2.Close()
+
+	redis2 := newMockRedis()
+	sched2 := NewTaskScheduler(sqlite2, redis2)
+
+	status, err := sched2.GetTaskStatus(taskID)
+	if err != nil {
+		t.Fatalf("GetTaskStatus failed: %v", err)
+	}
+	if status != models.TaskStatusRunning {
+		t.Errorf("recovered task status = %s, want running", status)
+	}
+
+	sched2.StopTask(taskID)
+}
+
 func TestScheduler_DurationMs(t *testing.T) {
 	sched, cleanup := setupTestScheduler(t)
 	defer cleanup()

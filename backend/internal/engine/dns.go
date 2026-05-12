@@ -16,7 +16,7 @@ type DNSPacket struct {
 	QType        uint16
 }
 
-func BuildDNSQuery(domain string, txID uint16) []byte {
+func BuildDNSQuery(domain string, txID uint16) ([]byte, error) {
 	header := make([]byte, 12)
 
 	binary.BigEndian.PutUint16(header[0:2], txID)
@@ -26,7 +26,10 @@ func BuildDNSQuery(domain string, txID uint16) []byte {
 	binary.BigEndian.PutUint16(header[8:10], 0)
 	binary.BigEndian.PutUint16(header[10:12], 0)
 
-	labels := parseDomain(domain)
+	labels, err := parseDomain(domain)
+	if err != nil {
+		return nil, err
+	}
 	query := append(header, labels...)
 
 	tail := make([]byte, 4)
@@ -34,14 +37,20 @@ func BuildDNSQuery(domain string, txID uint16) []byte {
 	binary.BigEndian.PutUint16(tail[2:4], 1) // QCLASS IN
 	query = append(query, tail...)
 
-	return query
+	return query, nil
 }
 
-func parseDomain(domain string) []byte {
+func parseDomain(domain string) ([]byte, error) {
+	if len(domain) > 253 {
+		return nil, fmt.Errorf("domain name exceeds 253 characters")
+	}
 	var result []byte
 	labels := []byte{}
 	for _, c := range []byte(domain) {
 		if c == '.' {
+			if len(labels) > 63 {
+				return nil, fmt.Errorf("label exceeds 63 characters")
+			}
 			result = append(result, byte(len(labels)))
 			result = append(result, labels...)
 			labels = []byte{}
@@ -50,21 +59,31 @@ func parseDomain(domain string) []byte {
 		}
 	}
 	if len(labels) > 0 {
+		if len(labels) > 63 {
+			return nil, fmt.Errorf("label exceeds 63 characters")
+		}
 		result = append(result, byte(len(labels)))
 		result = append(result, labels...)
 	}
 	result = append(result, 0)
-	return result
+	return result, nil
 }
 
 func ParseCSVDomains(content string) []string {
 	var domains []string
 	lines := []byte{}
 	inQuote := false
+	data := []byte(content)
 
-	for _, c := range []byte(content) {
+	for i := 0; i < len(data); i++ {
+		c := data[i]
 		if c == '"' {
-			inQuote = !inQuote
+			if inQuote && i+1 < len(data) && data[i+1] == '"' {
+				lines = append(lines, '"')
+				i++
+			} else {
+				inQuote = !inQuote
+			}
 		} else if c == '\n' && !inQuote {
 			if len(lines) > 0 {
 				domain := string(lines)
@@ -207,7 +226,7 @@ func checksum(data []byte) uint16 {
 	return ^uint16(sum)
 }
 
-func BuildUDPPacket(srcPort, dstPort uint16, payload []byte) []byte {
+func BuildUDPPacket(srcPort, dstPort uint16, srcIP, dstIP string, payload []byte) []byte {
 	header := make([]byte, 8)
 	binary.BigEndian.PutUint16(header[0:2], srcPort)
 	binary.BigEndian.PutUint16(header[2:4], dstPort)
@@ -220,8 +239,6 @@ func BuildUDPPacket(srcPort, dstPort uint16, payload []byte) []byte {
 
 	return append(header, payload...)
 }
-
-var srcIP, dstIP string
 
 func udpChecksum(src, dst string, data []byte) uint16 {
 	srcIP := net.ParseIP(src)
