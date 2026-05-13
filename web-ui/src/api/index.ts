@@ -28,6 +28,7 @@ export const taskAPI = {
     api.get<PcapDirList>('/pcap/dirs', { params: { path } }).then(r => r.data),
 };
 
-export const WS_URL = `ws://${window.location.host}/api/v1/ws/tasks`;
+const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+export const WS_URL = `${wsProtocol}//${window.location.host}/api/v1/ws/tasks`;
 
 export default api;

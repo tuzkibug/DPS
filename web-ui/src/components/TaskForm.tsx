@@ -11,6 +11,21 @@ interface TaskFormProps {
   onSuccess?: () => void;
 }
 
+interface TaskFormValues {
+  name: string;
+  input_type: string;
+  src_ip: string;
+  dst_ip: string;
+  src_mac: string;
+  dst_mac: string;
+  target_qps: number;
+  jitter: number;
+  delay_min_ms: number;
+  delay_max_ms: number;
+  start_time?: string;
+  duration_ms?: number;
+}
+
 export const TaskForm: React.FC<TaskFormProps> = ({ onSuccess }) => {
   const [form] = Form.useForm();
   const [file, setFile] = useState<File | null>(null);
@@ -53,7 +68,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onSuccess }) => {
     fetchPcapDirs(newPath);
   };
 
-  const handleSubmit = async (values: any) => {
+  const handleSubmit = async (values: TaskFormValues) => {
     setLoading(true);
     try {
       let fileContent = '';

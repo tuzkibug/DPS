@@ -48,6 +48,7 @@ func (h *WSHandler) HandleTaskWS(c *gin.Context) {
 
 	conn, err := h.upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
+		log.Printf("ws upgrade error: %v", err)
 		return
 	}
 	defer conn.Close()
@@ -82,6 +83,7 @@ func (h *WSHandler) HandleTaskWS(c *gin.Context) {
 func (h *WSHandler) pushStats(conn *websocket.Conn, taskID uuid.UUID) {
 	stats, err := h.scheduler.GetStats(taskID)
 	if err != nil {
+		log.Printf("ws pushStats get error: %v", err)
 		return
 	}
 	msg := models.WSMessage{Type: "stats", Data: stats}
@@ -93,6 +95,9 @@ func (h *WSHandler) pushStats(conn *websocket.Conn, taskID uuid.UUID) {
 func (h *WSHandler) pushStatus(conn *websocket.Conn, taskID uuid.UUID) {
 	status, err := h.scheduler.GetTaskStatus(taskID)
 	if err != nil || status == "" {
+		if err != nil {
+			log.Printf("ws pushStatus get error: %v", err)
+		}
 		return
 	}
 	msg := models.WSMessage{Type: "status_change", Data: map[string]interface{}{"status": status}}

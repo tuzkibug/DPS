@@ -106,7 +106,9 @@ func (s *PacketSender) run(ctx context.Context, taskID uuid.UUID, statsChan chan
 		default:
 			batch := s.qos.BatchSize()
 			for i := 0; i < batch; i++ {
-				s.sendPacket()
+				if err := s.sendPacket(); err != nil {
+					continue
+				}
 				sentCount++
 			}
 			s.qos.Wait()

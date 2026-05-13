@@ -1,0 +1,11 @@
+server
+data.db
+*.test
+.git/
+*.md
+.env
+.env.local
+.DS_Store
+uploads/
+pcap/
+data/

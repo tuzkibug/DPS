@@ -316,6 +316,25 @@ npm run test:watch # 监视模式
 
 ## 版本历史
 
+### v0.2.5 (2026-05-13) — 安全加固与可观测性
+
+- **新增** WebSocket 关键路径错误日志（upgrade 失败、push 失败）
+- **修复** `sendPacket` 失败时不再错误递增 `sentCount`
+- **改进** TaskForm `handleSubmit` 用 `TaskFormValues` 接口替代 `any` 类型
+- **修复** WebSocket URL 根据页面协议动态选择 `ws://` 或 `wss://`
+- **新增** Backend 和 Web-UI 的 `.dockerignore` 文件
+- **新增** Nginx 安全头（X-Content-Type-Options、X-Frame-Options、X-XSS-Protection、Referrer-Policy、CSP）
+
+### v0.2.4 (2026-05-12) — 错误处理增强与集成测试
+
+- **修复** `sqlite.go` 所有 `rows.Next()` 循环后添加 `rows.Err()` 检查
+- **修复** `recoverTasks`、`StopTask`、`watchStats` 中的错误静默丢弃，改为 `log.Printf` 记录
+- **修复** `StopTask` 中 `GetStartTime` 错误导致 `TotalRunMs` 从不累加的 bug
+- **修复** `go.mod` 中 `gopacket` 标记为 `// indirect`
+- **修复** `go vet` 报错：删除未使用的 `burstSize` 字段
+- **新增** 9 个端到端集成测试（API → scheduler → engine → Redis 全链路）
+- **移除** 未使用的 `recharts` 前端依赖
+
 ### v0.2.3 (2026-05-12) — 健壮性与安全加固
 
 - **修复** `BuildUDPPacket` 包级全局变量 `srcIP`/`dstIP` 的并发数据竞争
