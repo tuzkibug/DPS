@@ -316,6 +316,17 @@ npm run test:watch # 监视模式
 
 ## 版本历史
 
+### v0.2.7 (2026-05-13) — 测试基础设施与代码去重
+
+- **重构** 提取共享 `testutil.MockRedis`，消除 handler 和 scheduler 测试的 mock 重复代码
+- **清理** 移除 `sqlite.go` 中 `GetTask`/`ListTasks` 的冗余 `uuid.Parse`
+- **统一** `math/rand` → `math/rand/v2`，dns.go 与 sender.go 保持一致
+- **新增** Makefile（`make test`、`build`、`vet`、`run` 等）
+- **新增** TaskListPage 加载 loading 状态
+- **新增** `getInterfaceByIP` 接口缓存（减少网卡枚举）
+- **新增** `docker-compose.yml` 添加 `version: "3.8"`
+- **清理** 删除 `uploads/` 残留开发文件
+
 ### v0.2.6 (2026-05-13) — 代码质量与可靠性
 
 - **修复** PCAP 类型断言检查返回值，防止 nil pointer panic

@@ -2,7 +2,6 @@ package api
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -13,57 +12,11 @@ import (
 
 	"dns-sender/internal/scheduler"
 	"dns-sender/internal/store"
+	"dns-sender/internal/testutil"
 	"dns-sender/pkg/models"
 
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 )
-
-type mockRedis struct {
-	status    map[string]models.TaskStatus
-	startTime map[string]time.Time
-	stats     map[string]*models.TaskStats
-}
-
-func newMockRedis() *mockRedis {
-	return &mockRedis{
-		status:    make(map[string]models.TaskStatus),
-		startTime: make(map[string]time.Time),
-		stats:     make(map[string]*models.TaskStats),
-	}
-}
-
-func (m *mockRedis) SetTaskStatus(_ context.Context, id uuid.UUID, s models.TaskStatus) error {
-	m.status[id.String()] = s
-	return nil
-}
-func (m *mockRedis) GetTaskStatus(_ context.Context, id uuid.UUID) (models.TaskStatus, error) {
-	return m.status[id.String()], nil
-}
-func (m *mockRedis) SetTaskStats(_ context.Context, stats *models.TaskStats) error {
-	m.stats[stats.TaskID.String()] = stats
-	return nil
-}
-func (m *mockRedis) GetTaskStats(_ context.Context, id uuid.UUID) (*models.TaskStats, error) {
-	return m.stats[id.String()], nil
-}
-func (m *mockRedis) SetStartTime(_ context.Context, id uuid.UUID, t time.Time) error {
-	m.startTime[id.String()] = t
-	return nil
-}
-func (m *mockRedis) GetStartTime(_ context.Context, id uuid.UUID) (time.Time, error) {
-	t, ok := m.startTime[id.String()]
-	if !ok {
-		return time.Time{}, nil
-	}
-	return t, nil
-}
-func (m *mockRedis) ClearTaskData(_ context.Context, id uuid.UUID) error {
-	delete(m.status, id.String())
-	delete(m.startTime, id.String())
-	delete(m.stats, id.String())
-	return nil
-}
 
 func setupIntegrationTest(t *testing.T) (*gin.Engine, *TaskHandler, func()) {
 	t.Helper()
@@ -80,7 +33,7 @@ func setupIntegrationTest(t *testing.T) (*gin.Engine, *TaskHandler, func()) {
 		t.Fatal(err)
 	}
 
-	redisStore := newMockRedis()
+	redisStore := testutil.NewMockRedis()
 	sched := scheduler.NewTaskScheduler(sqliteStore, redisStore)
 
 	uploadDir, err := os.MkdirTemp("", "test-uploads")
@@ -451,7 +404,7 @@ func TestIntegration_RecoverTasksOnStartup(t *testing.T) {
 
 	// Create first scheduler and start a task
 	sqlite1, _ := store.NewSQLiteStore(dbPath)
-	redis1 := newMockRedis()
+	redis1 := testutil.NewMockRedis()
 	sched1 := scheduler.NewTaskScheduler(sqlite1, redis1)
 
 	uploadDir1, _ := os.MkdirTemp("", "test-uploads-1")
@@ -486,7 +439,7 @@ func TestIntegration_RecoverTasksOnStartup(t *testing.T) {
 
 	// Simulate restart: new scheduler with same DB
 	sqlite2, _ := store.NewSQLiteStore(dbPath)
-	redis2 := newMockRedis()
+	redis2 := testutil.NewMockRedis()
 	sched2 := scheduler.NewTaskScheduler(sqlite2, redis2)
 	handler2 := NewTaskHandler(sched2, uploadDir1, pcapDir1)
 	defer sqlite2.Close()

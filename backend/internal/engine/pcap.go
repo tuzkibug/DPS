@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"sync"
 	"syscall"
 
 	"github.com/google/gopacket"
@@ -193,8 +194,35 @@ func openRawSocket(srcIP net.IP) (int, int, error) {
 	return fd, ifaceObj.Index, nil
 }
 
+var (
+	ifaceCache   = map[string]string{}
+	ifaceCacheMu sync.RWMutex
+)
+
 // getInterfaceByIP finds the network interface name that has the given IP address.
+// Results are cached since interfaces rarely change at runtime.
 func getInterfaceByIP(target net.IP) (string, error) {
+	key := target.String()
+	ifaceCacheMu.RLock()
+	if name, ok := ifaceCache[key]; ok {
+		ifaceCacheMu.RUnlock()
+		return name, nil
+	}
+	ifaceCacheMu.RUnlock()
+
+	name, err := findInterfaceByIP(target)
+	if err != nil {
+		return "", err
+	}
+
+	ifaceCacheMu.Lock()
+	ifaceCache[key] = name
+	ifaceCacheMu.Unlock()
+
+	return name, nil
+}
+
+func findInterfaceByIP(target net.IP) (string, error) {
 	interfaces, err := net.Interfaces()
 	if err != nil {
 		return "", err

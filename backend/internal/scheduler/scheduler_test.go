@@ -1,66 +1,16 @@
 package scheduler
 
 import (
-	"context"
 	"os"
 	"testing"
 	"time"
 
 	"dns-sender/internal/store"
+	"dns-sender/internal/testutil"
 	"dns-sender/pkg/models"
 
 	"github.com/google/uuid"
 )
-
-type mockRedis struct {
-	status    map[string]models.TaskStatus
-	startTime map[string]time.Time
-	stats     map[string]*models.TaskStats
-}
-
-func newMockRedis() *mockRedis {
-	return &mockRedis{
-		status:    make(map[string]models.TaskStatus),
-		startTime: make(map[string]time.Time),
-		stats:     make(map[string]*models.TaskStats),
-	}
-}
-
-func (m *mockRedis) key(id uuid.UUID, field string) string {
-	return id.String() + ":" + field
-}
-
-func (m *mockRedis) SetTaskStatus(_ context.Context, id uuid.UUID, s models.TaskStatus) error {
-	m.status[id.String()] = s
-	return nil
-}
-func (m *mockRedis) GetTaskStatus(_ context.Context, id uuid.UUID) (models.TaskStatus, error) {
-	return m.status[id.String()], nil
-}
-func (m *mockRedis) SetTaskStats(_ context.Context, stats *models.TaskStats) error {
-	m.stats[stats.TaskID.String()] = stats
-	return nil
-}
-func (m *mockRedis) GetTaskStats(_ context.Context, id uuid.UUID) (*models.TaskStats, error) {
-	return m.stats[id.String()], nil
-}
-func (m *mockRedis) SetStartTime(_ context.Context, id uuid.UUID, t time.Time) error {
-	m.startTime[id.String()] = t
-	return nil
-}
-func (m *mockRedis) GetStartTime(_ context.Context, id uuid.UUID) (time.Time, error) {
-	t, ok := m.startTime[id.String()]
-	if !ok {
-		return time.Time{}, nil
-	}
-	return t, nil
-}
-func (m *mockRedis) ClearTaskData(_ context.Context, id uuid.UUID) error {
-	delete(m.status, id.String())
-	delete(m.startTime, id.String())
-	delete(m.stats, id.String())
-	return nil
-}
 
 func setupTestScheduler(t *testing.T) (*TaskScheduler, func()) {
 	tmpfile, err := os.CreateTemp("", "test-sched.db")
@@ -75,7 +25,7 @@ func setupTestScheduler(t *testing.T) (*TaskScheduler, func()) {
 		t.Fatal(err)
 	}
 
-	sched := NewTaskScheduler(sqlite, newMockRedis())
+	sched := NewTaskScheduler(sqlite, testutil.NewMockRedis())
 
 	cleanup := func() {
 		sqlite.Close()
@@ -325,7 +275,7 @@ func TestScheduler_RecoverTasks(t *testing.T) {
 	}
 	defer sqlite2.Close()
 
-	redis2 := newMockRedis()
+	redis2 := testutil.NewMockRedis()
 	sched2 := NewTaskScheduler(sqlite2, redis2)
 
 	status, err := sched2.GetTaskStatus(taskID)

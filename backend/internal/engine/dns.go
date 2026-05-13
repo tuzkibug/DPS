@@ -3,7 +3,7 @@ package engine
 import (
 	"encoding/binary"
 	"fmt"
-	"math/rand"
+	"math/rand/v2"
 	"net"
 	"time"
 
@@ -172,7 +172,7 @@ func (q *QoSController) Wait() {
 	if q.jitter > 0 {
 		jitterRange := time.Duration(float64(batchInterval) * q.jitter)
 		if jitterRange > 0 {
-			offset := time.Duration(rand.Int63n(int64(jitterRange*2+1))) - jitterRange
+			offset := time.Duration(rand.Int64N(int64(jitterRange*2+1))) - jitterRange
 			batchInterval += offset
 		}
 	}
@@ -185,7 +185,7 @@ func (q *QoSController) Wait() {
 		for i := 0; i < q.batchSize; i++ {
 			delay := q.delayMin
 			if q.delayMax > q.delayMin {
-				delay += time.Duration(rand.Int63n(int64(q.delayMax - q.delayMin)))
+				delay += time.Duration(rand.Int64N(int64(q.delayMax - q.delayMin)))
 			}
 			time.Sleep(delay)
 		}

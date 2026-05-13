@@ -160,7 +160,6 @@ func (s *SQLiteStore) GetTask(id uuid.UUID) (*models.Task, error) {
 	task.UpdatedAt, _ = time.Parse(time.RFC3339, updatedAtStr)
 	task.LastRunAt = parseTimePtr(lastRunAtStr)
 
-	task.ID, _ = uuid.Parse(task.ID.String())
 	return &task, nil
 }
 
@@ -194,8 +193,7 @@ func (s *SQLiteStore) ListTasks() ([]*models.Task, error) {
 		task.CreatedAt, _ = time.Parse(time.RFC3339, createdAtStr)
 		task.UpdatedAt, _ = time.Parse(time.RFC3339, updatedAtStr)
 		task.LastRunAt = parseTimePtr(lastRunAtStr)
-		task.ID, _ = uuid.Parse(task.ID.String())
-		tasks = append(tasks, &task)
+			tasks = append(tasks, &task)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
