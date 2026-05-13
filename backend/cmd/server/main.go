@@ -16,7 +16,7 @@ func main() {
 	sqlitePath := getEnv("SQLITE_PATH", "./data.db")
 	uploadDir := getEnv("UPLOAD_DIR", "./uploads")
 	pcapDir := getEnv("PCAP_DIR", "./pcap")
-	port := getEnv("PORT", "8080")
+	port := getEnv("BACKEND_PORT", "8080")
 	frontendPort := getEnv("FRONTEND_PORT", "3000")
 
 	if err := os.MkdirAll(uploadDir, 0755); err != nil {

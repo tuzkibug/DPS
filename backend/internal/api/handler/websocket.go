@@ -53,6 +53,12 @@ func (h *WSHandler) HandleTaskWS(c *gin.Context) {
 	}
 	defer conn.Close()
 
+	conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+	conn.SetPongHandler(func(string) error {
+		conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+		return nil
+	})
+
 	// Push initial state
 	h.pushStats(conn, taskID)
 	h.pushStatus(conn, taskID)
@@ -67,6 +73,9 @@ func (h *WSHandler) HandleTaskWS(c *gin.Context) {
 		}
 	}()
 
+	pingTicker := time.NewTicker(30 * time.Second)
+	defer pingTicker.Stop()
+
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
@@ -76,6 +85,10 @@ func (h *WSHandler) HandleTaskWS(c *gin.Context) {
 			return
 		case <-ticker.C:
 			h.pushStats(conn, taskID)
+		case <-pingTicker.C:
+			if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+				return
+			}
 		}
 	}
 }

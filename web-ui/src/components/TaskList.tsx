@@ -1,6 +1,7 @@
-import React, { useEffect } from 'react';
+import React, { useCallback, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Table, Tag, Space } from 'antd';
+import { Table, Tag, Space, Button } from 'antd';
+import { ReloadOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import type { Task } from '../api/types';
 import { useTaskStore } from '../stores/taskStore';
@@ -19,7 +20,11 @@ export const TaskList: React.FC = () => {
 
   useEffect(() => {
     fetchTasks();
-  }, []);
+  }, [fetchTasks]);
+
+  const handleRefresh = useCallback(() => {
+    fetchTasks();
+  }, [fetchTasks]);
 
   const columns: ColumnsType<Task> = [
     {
@@ -47,5 +52,12 @@ export const TaskList: React.FC = () => {
     },
   ];
 
-  return <Table columns={columns} dataSource={tasks} rowKey="id" pagination={false} />;
+  return (
+    <div>
+      <div style={{ marginBottom: 16, textAlign: 'right' }}>
+        <Button icon={<ReloadOutlined />} onClick={handleRefresh}>Refresh</Button>
+      </div>
+      <Table columns={columns} dataSource={tasks} rowKey="id" pagination={false} />
+    </div>
+  );
 };

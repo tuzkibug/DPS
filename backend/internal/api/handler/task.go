@@ -68,7 +68,7 @@ func (h *TaskHandler) CreateTask(c *gin.Context) {
 		}
 		filePath = filepath.Join(h.uploadDir, taskID+ext)
 
-		if err := os.WriteFile(filePath, data, 0644); err != nil {
+		if err := os.WriteFile(filePath, data, 0600); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save file"})
 			return
 		}

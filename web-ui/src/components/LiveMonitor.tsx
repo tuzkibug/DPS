@@ -35,6 +35,9 @@ export const LiveMonitor: React.FC<LiveMonitorProps> = ({ taskId, onDeleted }) =
   useEffect(() => {
     const ws = new WebSocket(`${WS_URL}/${taskId}`);
 
+    ws.onopen = () => {
+      setStats(null); // reset for fresh connection
+    };
     ws.onmessage = (event) => {
       try {
         const msg = JSON.parse(event.data);
@@ -47,6 +50,12 @@ export const LiveMonitor: React.FC<LiveMonitorProps> = ({ taskId, onDeleted }) =
       } catch (e) {
         console.error('Failed to parse WS message', e);
       }
+    };
+    ws.onerror = () => {
+      console.error('WebSocket connection error');
+    };
+    ws.onclose = () => {
+      setStats(null);
     };
 
     return () => ws.close();

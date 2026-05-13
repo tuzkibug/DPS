@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Form, Input, InputNumber, Select, Button, Card, Upload, message, Breadcrumb, List, Typography, Spin, Space } from 'antd';
 import { FolderOutlined, FileOutlined, HomeOutlined } from '@ant-design/icons';
 import type { CreateTaskRequest, QoSConfig, PcapDirList } from '../api/types';
@@ -68,7 +68,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onSuccess }) => {
     fetchPcapDirs(newPath);
   };
 
-  const handleSubmit = async (values: TaskFormValues) => {
+  const handleSubmit = useCallback(async (values: TaskFormValues) => {
     setLoading(true);
     try {
       let fileContent = '';
@@ -90,7 +90,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onSuccess }) => {
 
       const data: CreateTaskRequest = {
         name: values.name,
-        input_type: values.input_type,
+        input_type: values.input_type as 'csv' | 'pcap',
         file_content: fileContent,
         file_path: filePath,
         src_ip: values.src_ip,
@@ -119,14 +119,15 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onSuccess }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [file, inputType, pcapPath, createTask, form, onSuccess]);
 
-  const breadcrumbItems = [
-    { title: <HomeOutlined onClick={() => fetchPcapDirs('')} /> },
+  const breadcrumbItems = useMemo(() => [
+    { key: 'home', title: <HomeOutlined onClick={() => fetchPcapDirs('')} /> },
     ...pcapPath.split('/').filter(Boolean).map((part, i) => ({
+      key: `crumb-${i}-${part}`,
       title: <a onClick={() => navigateBreadcrumb(i)}>{part}</a>,
     })),
-  ];
+  ], [pcapPath, fetchPcapDirs, navigateBreadcrumb]);
 
   return (
     <Card title="Create DNS Send Task">

@@ -96,6 +96,7 @@ func (s *TaskScheduler) StartTask(task *models.Task) error {
 			domains = engine.ParseCSVDomains(s.readFileContent(task.FilePath))
 		}
 		if len(domains) == 0 {
+			log.Printf("StartTask: no domains for task %s, using fallback defaults", task.ID)
 			domains = []string{"example.com", "google.com", "cloudflare.com"}
 		}
 		sender, err := engine.NewPacketSender(task, domains)

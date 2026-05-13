@@ -128,6 +128,21 @@ func NewQoSController(cfg models.QoSConfig) *QoSController {
 	if cfg.TargetQPS <= 0 {
 		cfg.TargetQPS = 100
 	}
+	if cfg.Jitter < 0 {
+		cfg.Jitter = 0
+	}
+	if cfg.Jitter > 1 {
+		cfg.Jitter = 1
+	}
+	if cfg.DelayMinMs < 0 {
+		cfg.DelayMinMs = 0
+	}
+	if cfg.DelayMaxMs < 0 {
+		cfg.DelayMaxMs = 0
+	}
+	if cfg.DelayMaxMs < cfg.DelayMinMs {
+		cfg.DelayMaxMs = cfg.DelayMinMs
+	}
 
 	interval := time.Second / time.Duration(cfg.TargetQPS)
 	batchSize := 1

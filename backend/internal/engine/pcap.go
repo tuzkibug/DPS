@@ -2,6 +2,7 @@ package engine
 
 import (
 	"fmt"
+	"log"
 	"net"
 	"os"
 	"path/filepath"
@@ -63,7 +64,8 @@ func loadPacketsFromDir(dirPath, srcMAC, dstMAC, srcIP, dstIP string) ([]packetG
 		fullPath := filepath.Join(dirPath, name)
 		packets, err := readAndRewriteFile(fullPath, srcMAC, dstMAC, srcIP, dstIP)
 		if err != nil {
-			continue // skip unreadable files
+			log.Printf("loadPacketsFromDir: skipping %s: %v", fullPath, err)
+			continue
 		}
 		if len(packets) > 0 {
 			groups = append(groups, packetGroup{Name: name, Packets: packets})
@@ -96,6 +98,7 @@ func readAndRewriteFile(path, srcMAC, dstMAC, srcIP, dstIP string) ([][]byte, er
 		raw := packet.Data()
 		rewritten, err := rewritePacket(raw, hwSrcMAC, hwDstMAC, ipSrc, ipDst)
 		if err != nil {
+			log.Printf("readAndRewriteFile: failed to rewrite packet in %s: %v", path, err)
 			continue
 		}
 		packets = append(packets, rewritten)
@@ -114,8 +117,11 @@ func rewritePacket(raw []byte, srcMAC, dstMAC net.HardwareAddr, srcIP, dstIP net
 		return nil, fmt.Errorf("packet missing ethernet or ip layer")
 	}
 
-	eth, _ := ethLayer.(*layers.Ethernet)
-	ip, _ := ipLayer.(*layers.IPv4)
+	eth, ethOk := ethLayer.(*layers.Ethernet)
+	ip, ipOk := ipLayer.(*layers.IPv4)
+	if !ethOk || !ipOk {
+		return nil, fmt.Errorf("type assertion failed")
+	}
 
 	// Rewrite addresses
 	copy(eth.SrcMAC, srcMAC)

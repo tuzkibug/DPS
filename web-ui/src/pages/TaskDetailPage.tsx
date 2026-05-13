@@ -18,8 +18,11 @@ export const TaskDetailPage: React.FC = () => {
     if (id) fetchTask(id);
   }, [id]);
 
-  if (loading || !currentTask) {
+  if (loading) {
     return <Spin tip="Loading..." />;
+  }
+  if (!currentTask) {
+    return <div style={{ color: '#999', textAlign: 'center', padding: 48 }}>Task not found or has been deleted.</div>;
   }
 
   const task = currentTask;

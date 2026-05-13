@@ -316,6 +316,22 @@ npm run test:watch # 监视模式
 
 ## 版本历史
 
+### v0.2.6 (2026-05-13) — 代码质量与可靠性
+
+- **修复** PCAP 类型断言检查返回值，防止 nil pointer panic
+- **修复** 上传文件权限 `0644` → `0600`
+- **新增** QoS 参数输入校验（jitter∈[0,1]、delay≥0、delay_max≥delay_min）
+- **新增** PCAP 文件/包跳过时输出日志
+- **新增** TaskList 手动刷新按钮
+- **新增** LiveMonitor WebSocket `onerror`/`onclose` 处理
+- **改进** TaskForm `handleSubmit` 和 `breadcrumbItems` 使用 React Hooks 优化
+- **修复** TaskDetailPage 区分 loading 与 not-found 状态
+- **修复** `deleteTask` 添加 try/catch 错误处理
+- **新增** WebSocket ping/pong 保活 + 60s 读写超时
+- **改进** 后端 `PORT` → `BACKEND_PORT` 统一命名
+- **新增** Backend Docker 健康检查
+- **改进** 前端 Dockerfile 使用 `npm ci`
+
 ### v0.2.5 (2026-05-13) — 安全加固与可观测性
 
 - **新增** WebSocket 关键路径错误日志（upgrade 失败、push 失败）
