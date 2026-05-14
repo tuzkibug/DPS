@@ -98,7 +98,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onSuccess }) => {
         src_mac: values.src_mac,
         dst_mac: values.dst_mac,
         start_time: values.start_time,
-        duration_ms: values.duration_ms,
+        duration_ms: (values as any).duration_sec ? (values as any).duration_sec * 1000 : 0,
         qos: {
           target_qps: values.target_qps,
           jitter: values.jitter,
@@ -252,6 +252,10 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onSuccess }) => {
 
         <Form.Item name="delay_max_ms" label="Max Delay (ms)" initialValue={0}>
           <InputNumber min={0} style={{ width: '100%' }} />
+        </Form.Item>
+
+        <Form.Item name="duration_sec" label="Duration (seconds, 0 = unlimited)" initialValue={0}>
+          <InputNumber min={0} max={86400} style={{ width: '100%' }} />
         </Form.Item>
 
         <Form.Item>

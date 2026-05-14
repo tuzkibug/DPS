@@ -6,6 +6,7 @@ interface TaskState {
   tasks: Task[];
   currentTask: Task | null;
   stats: Record<string, TaskStats>;
+  qpsSamples: Record<string, Array<{ qps: number; time: number }>>;
   loading: boolean;
   error: string | null;
 
@@ -16,13 +17,19 @@ interface TaskState {
   deleteTask: (id: string) => Promise<void>;
   startTask: (id: string) => Promise<void>;
   stopTask: (id: string) => Promise<void>;
+  batchStart: (ids: string[]) => Promise<void>;
+  batchStop: (ids: string[]) => Promise<void>;
+  batchDelete: (ids: string[]) => Promise<void>;
   setStats: (taskId: string, stats: TaskStats) => void;
+  pushQpsSample: (taskId: string, qps: number, time: number) => void;
+  setTaskStatus: (taskId: string, status: string) => void;
 }
 
 export const useTaskStore = create<TaskState>((set) => ({
   tasks: [],
   currentTask: null,
   stats: {},
+  qpsSamples: {},
   loading: false,
   error: null,
 
@@ -88,9 +95,53 @@ export const useTaskStore = create<TaskState>((set) => ({
     }));
   },
 
+  batchStart: async (ids) => {
+    for (const id of ids) {
+      await taskAPI.start(id);
+    }
+    set(state => ({
+      tasks: state.tasks.map(t => ids.includes(t.id) ? { ...t, status: 'running' as const } : t),
+    }));
+  },
+
+  batchStop: async (ids) => {
+    for (const id of ids) {
+      await taskAPI.stop(id);
+    }
+    set(state => ({
+      tasks: state.tasks.map(t => ids.includes(t.id) ? { ...t, status: 'pending' as const } : t),
+    }));
+  },
+
+  batchDelete: async (ids) => {
+    for (const id of ids) {
+      try {
+        await taskAPI.delete(id);
+      } catch (_) { /* continue */ }
+    }
+    set(state => ({
+      tasks: state.tasks.filter(t => !ids.includes(t.id)),
+    }));
+  },
+
   setStats: (taskId, stats) => {
     set(state => ({
       stats: { ...state.stats, [taskId]: stats },
+    }));
+  },
+
+  pushQpsSample: (taskId, qps, time) => {
+    set(state => {
+      const prev = state.qpsSamples[taskId] ?? [];
+      const next = [...prev, { qps, time }].slice(-60);
+      return { qpsSamples: { ...state.qpsSamples, [taskId]: next } };
+    });
+  },
+
+  setTaskStatus: (taskId, status) => {
+    set(state => ({
+      tasks: state.tasks.map(t => t.id === taskId ? { ...t, status: status as Task['status'] } : t),
+      currentTask: state.currentTask?.id === taskId ? { ...state.currentTask, status: status as Task['status'] } : state.currentTask,
     }));
   },
 }));

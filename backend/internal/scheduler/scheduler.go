@@ -126,6 +126,15 @@ func (s *TaskScheduler) StartTask(task *models.Task) error {
 	s.redis.SetTaskStatus(context.Background(), task.ID, models.TaskStatusRunning)
 	s.redis.SetStartTime(context.Background(), task.ID, now)
 
+	// Auto-stop after fixed duration if set
+	if task.DurationMs > 0 {
+		dur := time.Duration(task.DurationMs) * time.Millisecond
+		time.AfterFunc(dur, func() {
+			log.Printf("auto-stopping task %s after duration %v", task.ID, dur)
+			s.StopTask(task.ID)
+		})
+	}
+
 	return nil
 }
 
@@ -142,7 +151,17 @@ func (s *TaskScheduler) StopTask(taskID uuid.UUID) error {
 	if info.Sender != nil {
 		info.Sender.Stop()
 	}
+	// Close stats channel so watchStats goroutine exits before we zero Redis
+	close(info.StatsChan)
 	delete(s.tasks, taskID)
+
+	// Zero out QPS in Redis stats so clients see the drop immediately
+	stats, err := s.redis.GetTaskStats(context.Background(), taskID)
+	if err == nil {
+		stats.CurrentQPS = 0
+		stats.Status = models.TaskStatusPending
+		s.redis.SetTaskStats(context.Background(), stats)
+	}
 
 	task, err := s.sqlite.GetTask(taskID)
 	if err == nil {

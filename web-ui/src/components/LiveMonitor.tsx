@@ -31,6 +31,8 @@ export const LiveMonitor: React.FC<LiveMonitorProps> = ({ taskId, onDeleted }) =
   const startTask = useTaskStore(s => s.startTask);
   const stopTask = useTaskStore(s => s.stopTask);
   const deleteTask = useTaskStore(s => s.deleteTask);
+  const pushQpsSample = useTaskStore(s => s.pushQpsSample);
+  const setTaskStatus = useTaskStore(s => s.setTaskStatus);
 
   useEffect(() => {
     const ws = new WebSocket(`${WS_URL}/${taskId}`);
@@ -42,10 +44,24 @@ export const LiveMonitor: React.FC<LiveMonitorProps> = ({ taskId, onDeleted }) =
       try {
         const msg = JSON.parse(event.data);
         if (msg.type === 'stats') {
-          setStats(msg.data);
+          const st = msg.data as TaskStats;
+          setStats(st);
+          pushQpsSample(taskId, st.current_qps, Date.now());
+          // Sync store status so buttons react to auto-stop
+          const cur = useTaskStore.getState().tasks.find(t => t.id === taskId);
+          if (cur && cur.status !== st.status) {
+            setTaskStatus(taskId, st.status);
+          }
         }
         if (msg.type === 'status_change') {
-          setStats(prev => prev ? { ...prev, status: msg.data.status } : null);
+          const newStatus = msg.data.status;
+          setTaskStatus(taskId, newStatus);
+          if (newStatus !== 'running') {
+            setStats(prev => prev ? { ...prev, current_qps: 0, status: newStatus } : null);
+            pushQpsSample(taskId, 0, Date.now());
+          } else {
+            setStats(prev => prev ? { ...prev, status: newStatus } : null);
+          }
         }
       } catch (e) {
         console.error('Failed to parse WS message', e);
@@ -88,7 +104,16 @@ export const LiveMonitor: React.FC<LiveMonitorProps> = ({ taskId, onDeleted }) =
       extra={
         <Space>
           {isRunning ? (
-            <Button danger onClick={handleStop}>Stop</Button>
+            <Popconfirm
+              title="Stop this task?"
+              description="Running progress will be lost."
+              onConfirm={handleStop}
+              okText="Stop"
+              cancelText="Cancel"
+              okButtonProps={{ danger: true }}
+            >
+              <Button danger>Stop</Button>
+            </Popconfirm>
           ) : (
             <Button type="primary" onClick={handleStart}>Start</Button>
           )}

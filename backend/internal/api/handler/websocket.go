@@ -2,6 +2,7 @@ package api
 
 import (
 	"log"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -27,6 +28,12 @@ func NewWSHandler(sched *scheduler.TaskScheduler, allowedOrigins []string) *WSHa
 				origin := r.Header.Get("Origin")
 				if origin == "" {
 					return true // allow non-browser clients
+				}
+				// Trust requests proxied by nginx on localhost
+				if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+					if host == "127.0.0.1" || host == "::1" {
+						return true
+					}
 				}
 				for _, allowed := range allowedOrigins {
 					if strings.EqualFold(origin, allowed) {
@@ -96,8 +103,11 @@ func (h *WSHandler) HandleTaskWS(c *gin.Context) {
 func (h *WSHandler) pushStats(conn *websocket.Conn, taskID uuid.UUID) {
 	stats, err := h.scheduler.GetStats(taskID)
 	if err != nil {
-		log.Printf("ws pushStats get error: %v", err)
 		return
+	}
+	// When not running, force QPS to 0 regardless of what's in Redis
+	if stats.Status != models.TaskStatusRunning {
+		stats.CurrentQPS = 0
 	}
 	msg := models.WSMessage{Type: "stats", Data: stats}
 	if err := conn.WriteJSON(msg); err != nil {

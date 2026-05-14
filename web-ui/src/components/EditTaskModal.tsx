@@ -27,6 +27,7 @@ export const EditTaskModal: React.FC<Props> = ({ task, open, onClose }) => {
         jitter: task.qos.jitter,
         delay_min_ms: task.qos.delay_min_ms,
         delay_max_ms: task.qos.delay_max_ms,
+        duration_sec: Math.round(task.duration_ms / 1000),
       });
     }
   }, [open, task, form]);
@@ -42,6 +43,7 @@ export const EditTaskModal: React.FC<Props> = ({ task, open, onClose }) => {
         dst_ip: values.dst_ip,
         src_mac: values.src_mac,
         dst_mac: values.dst_mac,
+        duration_ms: values.duration_sec ? values.duration_sec * 1000 : 0,
         qos: {
           target_qps: values.target_qps,
           jitter: values.jitter,
@@ -99,6 +101,9 @@ export const EditTaskModal: React.FC<Props> = ({ task, open, onClose }) => {
         </Form.Item>
         <Form.Item name="delay_max_ms" label="Max Delay (ms)">
           <InputNumber min={0} style={{ width: '100%' }} />
+        </Form.Item>
+        <Form.Item name="duration_sec" label="Duration (seconds, 0 = unlimited)">
+          <InputNumber min={0} max={86400} style={{ width: '100%' }} />
         </Form.Item>
       </Form>
     </Modal>

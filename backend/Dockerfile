@@ -1,6 +1,7 @@
-FROM golang:1.22 AS builder
+FROM golang:1.22-alpine AS builder
 
-RUN apt-get update && apt-get install -y gcc sqlite3 libsqlite3-dev libpcap0.8-dev && rm -rf /var/lib/apt/lists/*
+RUN sed -i 's|dl-cdn.alpinelinux.org|mirrors.aliyun.com|g' /etc/apk/repositories \
+    && apk add --no-cache gcc musl-dev sqlite-dev libpcap-dev
 
 WORKDIR /app
 COPY go.mod go.sum* ./
@@ -9,8 +10,9 @@ RUN go env -w GOPROXY=https://goproxy.cn,direct && go env -w GOSUMDB=off && go m
 COPY . .
 RUN CGO_ENABLED=1 go build -o server ./cmd/server
 
-FROM debian:bookworm-slim
-RUN apt-get update && apt-get install -y ca-certificates sqlite3 libpcap0.8 curl && rm -rf /var/lib/apt/lists/*
+FROM alpine:3.20
+RUN sed -i 's|dl-cdn.alpinelinux.org|mirrors.aliyun.com|g' /etc/apk/repositories \
+    && apk add --no-cache ca-certificates sqlite-libs libpcap curl
 WORKDIR /app
 COPY --from=builder /app/server ./server
 
