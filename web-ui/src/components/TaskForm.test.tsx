@@ -65,10 +65,11 @@ describe('TaskForm', () => {
     render(<TaskForm />);
 
     expect(screen.getByLabelText(/task name/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/source ip/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/^source ip$/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/destination ip/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/source mac/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/^source mac$/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/destination mac/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/random source ip/i)).toBeInTheDocument();
   });
 
   it('validates required name field', async () => {

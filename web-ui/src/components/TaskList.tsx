@@ -5,8 +5,40 @@ import { ReloadOutlined, PlayCircleOutlined, PauseCircleOutlined, DeleteOutlined
 import type { ColumnsType } from 'antd/es/table';
 import type { Task } from '../api/types';
 import { useTaskStore } from '../stores/taskStore';
-import { LiveMonitor } from './LiveMonitor';
 import { QpsSparkline } from './QpsSparkline';
+
+const TableActions: React.FC<{ task: Task }> = ({ task }) => {
+  const { startTask, stopTask, deleteTask } = useTaskStore();
+  const [loading, setLoading] = useState<string | null>(null);
+
+  const handleStart = async (id: string) => {
+    setLoading(id);
+    try { await startTask(id); message.success('Task started'); } catch { message.error('Failed to start'); }
+    setLoading(null);
+  };
+  const handleStop = async (id: string) => {
+    setLoading(id);
+    try { await stopTask(id); message.success('Task stopped'); } catch { message.error('Failed to stop'); }
+    setLoading(null);
+  };
+
+  if (task.status === 'running') {
+    return (
+      <Popconfirm title="Stop this task?" onConfirm={() => handleStop(task.id)}>
+        <Button size="small" danger icon={<PauseCircleOutlined />} loading={loading === task.id} />
+      </Popconfirm>
+    );
+  }
+  return (
+    <Space size="small">
+      <Button size="small" icon={<PlayCircleOutlined />} loading={loading === task.id}
+        onClick={() => handleStart(task.id)} />
+      <Popconfirm title="Delete this task?" onConfirm={() => deleteTask(task.id)}>
+        <Button size="small" danger icon={<DeleteOutlined />} />
+      </Popconfirm>
+    </Space>
+  );
+};
 
 const statusColors: Record<string, string> = {
   pending: 'default',
@@ -101,11 +133,8 @@ export const TaskList: React.FC = () => {
     {
       title: 'Actions',
       key: 'actions',
-      render: (_, task) => (
-        <Space>
-          <LiveMonitor taskId={task.id} />
-        </Space>
-      ),
+      width: 100,
+      render: (_, task) => <TableActions task={task} />,
     },
   ];
 
@@ -162,6 +191,7 @@ export const TaskList: React.FC = () => {
         dataSource={tasks}
         rowKey="id"
         pagination={false}
+        locale={{ emptyText: 'No tasks yet. Create one!' }}
       />
     </div>
   );

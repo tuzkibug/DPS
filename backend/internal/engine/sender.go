@@ -116,7 +116,7 @@ func (s *PacketSender) run(ctx context.Context, taskID uuid.UUID, statsChan chan
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 
-	var sentCount int64
+	var sentCount, failedCount int64
 	startTime := time.Now()
 
 	for {
@@ -129,6 +129,7 @@ func (s *PacketSender) run(ctx context.Context, taskID uuid.UUID, statsChan chan
 			stats := &models.TaskStats{
 				TaskID:     taskID,
 				SentCount:  sentCount,
+				FailedCount: failedCount,
 				CurrentQPS: float64(sentCount),
 				StartTime:  startTime,
 				ElapsedMs:   time.Since(startTime).Milliseconds(),
@@ -142,13 +143,14 @@ func (s *PacketSender) run(ctx context.Context, taskID uuid.UUID, statsChan chan
 			default:
 			}
 			sentCount = 0
+			failedCount = 0
 		default:
 			batch := s.qos.BatchSize()
 			for i := 0; i < batch; i++ {
-				if err := s.sendPacket(); err != nil {
-					continue
-				}
 				sentCount++
+				if err := s.sendPacket(); err != nil {
+					failedCount++
+				}
 			}
 			s.qos.Wait()
 		}
@@ -214,14 +216,30 @@ type PCAPSender struct {
 }
 
 func NewPCAPSender(cfg *models.Task, pcapDir string) (*PCAPSender, error) {
+	// Validate destination IP
+	dstIP := net.ParseIP(cfg.DstIP)
+	if dstIP == nil {
+		return nil, fmt.Errorf("invalid destination IP: %s", cfg.DstIP)
+	}
+	if dstIP.To4() == nil {
+		return nil, fmt.Errorf("destination IP must be IPv4, got %s", cfg.DstIP)
+	}
+	// Validate destination MAC
+	dstMAC, err := net.ParseMAC(cfg.DstMAC)
+	if err != nil {
+		return nil, fmt.Errorf("invalid destination MAC %q: %w", cfg.DstMAC, err)
+	}
+
 	var fd int
-	var err error
 	if cfg.Interface != "" {
 		fd, _, err = openRawSocketByName(cfg.Interface)
 	} else {
 		srcIP := net.ParseIP(cfg.SrcIP)
 		if srcIP == nil {
 			return nil, fmt.Errorf("invalid source IP: %s", cfg.SrcIP)
+		}
+		if srcIP.To4() == nil {
+			return nil, fmt.Errorf("source IP must be IPv4, got %s", cfg.SrcIP)
 		}
 		fd, _, err = openRawSocket(srcIP)
 	}
@@ -253,9 +271,6 @@ func NewPCAPSender(cfg *models.Task, pcapDir string) (*PCAPSender, error) {
 	for _, g := range rawGroups {
 		totalPkts += len(g.Packets)
 	}
-
-	dstMAC, _ := net.ParseMAC(cfg.DstMAC)
-	dstIP := net.ParseIP(cfg.DstIP)
 
 	return &PCAPSender{
 		sockfd:     fd,
@@ -298,7 +313,7 @@ func (p *PCAPSender) run(ctx context.Context, taskID uuid.UUID, statsChan chan<-
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 
-	var sentCount int64
+	var sentCount, failedCount int64
 	startTime := time.Now()
 
 	for {
@@ -309,21 +324,23 @@ func (p *PCAPSender) run(ctx context.Context, taskID uuid.UUID, statsChan chan<-
 			return
 		case <-ticker.C:
 			stats := &models.TaskStats{
-				TaskID:     taskID,
-				SentCount:  sentCount,
-				CurrentQPS: float64(sentCount),
-				StartTime:  startTime,
-				ElapsedMs:  time.Since(startTime).Milliseconds(),
-				Status:     models.TaskStatusRunning,
-				CreatedAt:  p.createdAt,
-				LastRunAt:  p.lastRunAt,
-				TotalRunMs: p.totalRunMs,
+				TaskID:      taskID,
+				SentCount:   sentCount,
+				FailedCount: failedCount,
+				CurrentQPS:  float64(sentCount),
+				StartTime:   startTime,
+				ElapsedMs:   time.Since(startTime).Milliseconds(),
+				Status:      models.TaskStatusRunning,
+				CreatedAt:   p.createdAt,
+				LastRunAt:   p.lastRunAt,
+				TotalRunMs:  p.totalRunMs,
 			}
 			select {
 			case statsChan <- stats:
 			default:
 			}
 			sentCount = 0
+			failedCount = 0
 		default:
 			batch := p.qos.BatchSize()
 			for i := 0; i < batch; i++ {
@@ -339,14 +356,17 @@ func (p *PCAPSender) run(ctx context.Context, taskID uuid.UUID, statsChan chan<-
 					if p.randomSrcIP {
 						srcIP = randomIPv4()
 					}
-					srcMAC, _ := net.ParseMAC(p.cfg.SrcMAC)
+					var srcMAC net.HardwareAddr
 					if p.randomSrcMAC {
 						srcMAC = randomMAC()
+					} else {
+						srcMAC, _ = net.ParseMAC(p.cfg.SrcMAC)
 					}
 					var err error
 					pkt, err = rewritePacket(raw, srcMAC, p.dstMAC, srcIP, p.dstIP)
 					if err != nil {
 						p.advance()
+						failedCount++
 						continue
 					}
 				} else {
@@ -382,8 +402,4 @@ func (p *PCAPSender) advance() {
 			p.curGroup = 0
 		}
 	}
-}
-
-func (p *PCAPSender) sendPacket(packetData []byte) error {
-	return WriteRaw(p.sockfd, packetData)
 }

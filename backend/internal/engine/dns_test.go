@@ -292,6 +292,32 @@ func TestUDPChecksumInvalidIP(t *testing.T) {
 	}
 }
 
+func TestBuildIPv4PacketRejectsIPv6(t *testing.T) {
+	payload := []byte{0x00, 0x01, 0x02}
+	_, err := BuildIPv4Packet("::1", "8.8.8.8", payload)
+	if err == nil {
+		t.Error("BuildIPv4Packet should reject IPv6 source")
+	}
+	_, err = BuildIPv4Packet("8.8.8.8", "2001:db8::1", payload)
+	if err == nil {
+		t.Error("BuildIPv4Packet should reject IPv6 destination")
+	}
+}
+
+func TestParseDomainEmptyLabels(t *testing.T) {
+	_, err := parseDomain("example..com")
+	if err == nil {
+		t.Error("parseDomain should reject empty labels from consecutive dots")
+	}
+}
+
+func TestParseDomainLeadingDot(t *testing.T) {
+	_, err := parseDomain(".example.com")
+	if err == nil {
+		t.Error("parseDomain should reject leading dots")
+	}
+}
+
 func TestBuildUDPPacketChecksumNonZero(t *testing.T) {
 	payload := []byte{
 		0x12, 0x34, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00,

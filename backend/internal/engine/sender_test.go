@@ -190,3 +190,61 @@ func TestNewPCAPSender_InvalidPath(t *testing.T) {
 		t.Error("expected error for nonexistent path, got nil")
 	}
 }
+
+func TestNewPCAPSender_InvalidDstMAC(t *testing.T) {
+	task := makeTestTask(100)
+	task.DstMAC = "badmac"
+	_, err := NewPCAPSender(task, "/nonexistent")
+	if err == nil {
+		t.Error("expected error for invalid dst MAC, got nil")
+	}
+}
+
+func TestNewPCAPSender_InvalidDstIP(t *testing.T) {
+	task := makeTestTask(100)
+	task.DstIP = "invalid"
+	_, err := NewPCAPSender(task, "/nonexistent")
+	if err == nil {
+		t.Error("expected error for invalid dst IP, got nil")
+	}
+}
+
+func TestNewPCAPSender_IPv6DstIP(t *testing.T) {
+	task := makeTestTask(100)
+	task.DstIP = "2001:db8::1"
+	_, err := NewPCAPSender(task, "/nonexistent")
+	if err == nil {
+		t.Error("expected error for IPv6 dst IP, got nil")
+	}
+}
+
+func TestNewPacketSender_RawMode_InvalidInterface(t *testing.T) {
+	task := makeTestTask(100)
+	task.RandomSrcIP = true
+	task.Interface = "nonexistent12345"
+	_, err := NewPacketSender(task, []string{"example.com"})
+	if err == nil {
+		t.Error("expected error for nonexistent interface in raw mode, got nil")
+	}
+}
+
+func TestNewPacketSender_RawMode_InvalidSrcIP(t *testing.T) {
+	task := makeTestTask(100)
+	task.RandomSrcIP = true
+	task.SrcIP = "invalid"
+	_, err := NewPacketSender(task, []string{"example.com"})
+	if err == nil {
+		t.Error("expected error for invalid src IP in raw mode, got nil")
+	}
+}
+
+func TestNewPacketSender_RawMode_InvalidDstIP(t *testing.T) {
+	task := makeTestTask(100)
+	task.RandomSrcIP = true
+	task.Interface = "lo"
+	task.DstIP = "invalid"
+	_, err := NewPacketSender(task, []string{"example.com"})
+	if err == nil {
+		t.Error("expected error for invalid dst IP in raw mode, got nil")
+	}
+}

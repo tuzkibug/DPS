@@ -51,7 +51,7 @@ export const QpsSparkline: React.FC<QpsSparklineProps> = ({ taskId, width = 200,
   }));
 
   return (
-    <svg width={width} height={height} style={{ display: 'block', fontFamily: 'monospace' }}>
+    <svg width={width} height={height} role="img" aria-label="QPS sparkline" style={{ display: 'block', fontFamily: 'monospace' }}>
       {/* Grid lines */}
       {yTicks.map((t, i) => (
         <line key={`gy-${i}`} x1={margin.left} y1={t.y} x2={width - margin.right} y2={t.y} stroke="#f0f0f0" strokeWidth={0.5} />

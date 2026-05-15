@@ -15,6 +15,8 @@ import (
 	"github.com/google/uuid"
 )
 
+const redisTimeout = 3 * time.Second
+
 type RedisOps interface {
 	SetTaskStatus(ctx context.Context, taskID uuid.UUID, status models.TaskStatus) error
 	GetTaskStatus(ctx context.Context, taskID uuid.UUID) (models.TaskStatus, error)
@@ -38,8 +40,14 @@ type TaskInfo struct {
 		Start(ctx context.Context, taskID uuid.UUID, statsChan chan<- *models.TaskStats)
 		Stop()
 	}
-	Cancel   context.CancelFunc
+	Cancel    context.CancelFunc
 	StatsChan chan *models.TaskStats
+	Done      chan struct{}
+}
+
+func (s *TaskScheduler) redisCtx() context.Context {
+	ctx, _ := context.WithTimeout(context.Background(), redisTimeout)
+	return ctx
 }
 
 func NewTaskScheduler(sqlite *store.SQLiteStore, redis RedisOps) *TaskScheduler {
@@ -67,7 +75,7 @@ func (s *TaskScheduler) recoverTasks() {
 				if uerr := s.sqlite.UpdateTask(task); uerr != nil {
 					log.Printf("recoverTasks: failed to update task %s status: %v", task.ID, uerr)
 				}
-				s.redis.SetTaskStatus(context.Background(), task.ID, models.TaskStatusPending)
+				s.redis.SetTaskStatus(s.redisCtx(), task.ID, models.TaskStatusPending)
 			}
 		}
 	}
@@ -83,11 +91,13 @@ func (s *TaskScheduler) StartTask(task *models.Task) error {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	statsChan := make(chan *models.TaskStats, 100)
+	done := make(chan struct{})
 
 	info := &TaskInfo{
 		ID:        task.ID,
-		Cancel:   cancel,
+		Cancel:    cancel,
 		StatsChan: statsChan,
+		Done:      done,
 	}
 
 	switch task.InputType {
@@ -118,14 +128,20 @@ func (s *TaskScheduler) StartTask(task *models.Task) error {
 
 	s.tasks[task.ID] = info
 
-	go s.watchStats(task.ID, statsChan)
+	go s.watchStats(task.ID, statsChan, done)
 
 	now := time.Now()
 	task.Status = models.TaskStatusRunning
 	task.LastRunAt = &now
-	s.sqlite.UpdateTask(task)
-	s.redis.SetTaskStatus(context.Background(), task.ID, models.TaskStatusRunning)
-	s.redis.SetStartTime(context.Background(), task.ID, now)
+	if err := s.sqlite.UpdateTask(task); err != nil {
+		log.Printf("StartTask: failed to update task %s: %v", task.ID, err)
+	}
+	if err := s.redis.SetTaskStatus(s.redisCtx(), task.ID, models.TaskStatusRunning); err != nil {
+		log.Printf("StartTask: failed to set Redis status for task %s: %v", task.ID, err)
+	}
+	if err := s.redis.SetStartTime(s.redisCtx(), task.ID, now); err != nil {
+		log.Printf("StartTask: failed to set Redis start time for task %s: %v", task.ID, err)
+	}
 
 	// Auto-stop after fixed duration if set
 	if task.DurationMs > 0 {
@@ -152,21 +168,25 @@ func (s *TaskScheduler) StopTask(taskID uuid.UUID) error {
 	if info.Sender != nil {
 		info.Sender.Stop()
 	}
-	// Close stats channel so watchStats goroutine exits before we zero Redis
 	close(info.StatsChan)
+	<-info.Done // wait for watchStats goroutine to finish before modifying Redis
 	delete(s.tasks, taskID)
 
 	// Zero out QPS in Redis stats so clients see the drop immediately
-	stats, err := s.redis.GetTaskStats(context.Background(), taskID)
+	stats, err := s.redis.GetTaskStats(s.redisCtx(), taskID)
 	if err == nil {
 		stats.CurrentQPS = 0
 		stats.Status = models.TaskStatusPending
-		s.redis.SetTaskStats(context.Background(), stats)
+		if err := s.redis.SetTaskStats(s.redisCtx(), stats); err != nil {
+			log.Printf("StopTask: failed to zero Redis stats for task %s: %v", taskID, err)
+		}
+	} else {
+		log.Printf("StopTask: failed to get Redis stats for task %s: %v", taskID, err)
 	}
 
 	task, err := s.sqlite.GetTask(taskID)
 	if err == nil {
-		startTime, err := s.redis.GetStartTime(context.Background(), taskID)
+		startTime, err := s.redis.GetStartTime(s.redisCtx(), taskID)
 		if err != nil {
 			log.Printf("StopTask: failed to get start time for task %s: %v", taskID, err)
 		}
@@ -175,26 +195,31 @@ func (s *TaskScheduler) StopTask(taskID uuid.UUID) error {
 			task.TotalRunMs += elapsed
 		}
 		task.Status = models.TaskStatusPending
-		s.sqlite.UpdateTask(task)
+		if err := s.sqlite.UpdateTask(task); err != nil {
+			log.Printf("StopTask: failed to update task %s in sqlite: %v", taskID, err)
+		}
 	} else {
 		log.Printf("StopTask: failed to get task %s from sqlite: %v", taskID, err)
 	}
-	s.redis.SetTaskStatus(context.Background(), taskID, models.TaskStatusPending)
+	if err := s.redis.SetTaskStatus(s.redisCtx(), taskID, models.TaskStatusPending); err != nil {
+		log.Printf("StopTask: failed to set Redis status for task %s: %v", taskID, err)
+	}
 
 	return nil
 }
 
 func (s *TaskScheduler) GetTaskStatus(taskID uuid.UUID) (models.TaskStatus, error) {
-	return s.redis.GetTaskStatus(context.Background(), taskID)
+	return s.redis.GetTaskStatus(s.redisCtx(), taskID)
 }
 
 func (s *TaskScheduler) GetStats(taskID uuid.UUID) (*models.TaskStats, error) {
-	return s.redis.GetTaskStats(context.Background(), taskID)
+	return s.redis.GetTaskStats(s.redisCtx(), taskID)
 }
 
-func (s *TaskScheduler) watchStats(taskID uuid.UUID, statsChan chan *models.TaskStats) {
+func (s *TaskScheduler) watchStats(taskID uuid.UUID, statsChan chan *models.TaskStats, done chan struct{}) {
+	defer close(done)
 	for stats := range statsChan {
-		if err := s.redis.SetTaskStats(context.Background(), stats); err != nil {
+		if err := s.redis.SetTaskStats(s.redisCtx(), stats); err != nil {
 			log.Printf("watchStats: failed to set stats for task %s: %v", taskID, err)
 		}
 	}
@@ -307,6 +332,8 @@ func (s *TaskScheduler) UpdateTask(taskID uuid.UUID, req *models.UpdateTaskReque
 
 func (s *TaskScheduler) DeleteTask(taskID uuid.UUID) error {
 	s.StopTask(taskID)
-	s.redis.ClearTaskData(context.Background(), taskID)
+	if err := s.redis.ClearTaskData(s.redisCtx(), taskID); err != nil {
+		log.Printf("DeleteTask: failed to clear Redis data for task %s: %v", taskID, err)
+	}
 	return s.sqlite.DeleteTask(taskID)
 }

@@ -5,6 +5,17 @@ const api = axios.create({
   baseURL: '/api/v1',
 });
 
+api.interceptors.response.use(
+  response => response,
+  error => {
+    const serverMsg = error.response?.data?.error;
+    if (serverMsg) {
+      error.message = serverMsg;
+    }
+    return Promise.reject(error);
+  }
+);
+
 export const taskAPI = {
   list: () => api.get<Task[]>('/tasks').then(r => r.data),
 

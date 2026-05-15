@@ -1,9 +1,9 @@
 package engine
 
 import (
+	"crypto/rand"
 	"fmt"
 	"log"
-	"math/rand/v2"
 	"net"
 	"os"
 	"path/filepath"
@@ -89,10 +89,30 @@ func readAndRewriteFile(path, srcMAC, dstMAC, srcIP, dstIP string) ([][]byte, er
 	}
 	defer handle.Close()
 
-	hwSrcMAC, _ := net.ParseMAC(srcMAC)
-	hwDstMAC, _ := net.ParseMAC(dstMAC)
-	ipSrc := net.ParseIP(srcIP).To4()
-	ipDst := net.ParseIP(dstIP).To4()
+	hwSrcMAC, err := net.ParseMAC(srcMAC)
+	if err != nil {
+		return nil, fmt.Errorf("invalid source MAC %q: %w", srcMAC, err)
+	}
+	hwDstMAC, err := net.ParseMAC(dstMAC)
+	if err != nil {
+		return nil, fmt.Errorf("invalid destination MAC %q: %w", dstMAC, err)
+	}
+	ip := net.ParseIP(srcIP)
+	if ip == nil {
+		return nil, fmt.Errorf("invalid source IP %q", srcIP)
+	}
+	ipSrc := ip.To4()
+	if ipSrc == nil {
+		return nil, fmt.Errorf("source IP must be IPv4, got %q", srcIP)
+	}
+	ip = net.ParseIP(dstIP)
+	if ip == nil {
+		return nil, fmt.Errorf("invalid destination IP %q", dstIP)
+	}
+	ipDst := ip.To4()
+	if ipDst == nil {
+		return nil, fmt.Errorf("destination IP must be IPv4, got %q", dstIP)
+	}
 
 	var packets [][]byte
 	packetSource := gopacket.NewPacketSource(handle, handle.LinkType())
@@ -181,20 +201,15 @@ func readRawFile(path string) ([][]byte, error) {
 
 // randomIPv4 returns a random IPv4 address.
 func randomIPv4() net.IP {
-	return net.IPv4(
-		byte(rand.Uint32()),
-		byte(rand.Uint32()),
-		byte(rand.Uint32()),
-		byte(rand.Uint32()),
-	)
+	b := make([]byte, 4)
+	rand.Read(b)
+	return net.IPv4(b[0], b[1], b[2], b[3])
 }
 
 // randomMAC returns a random unicast, locally administered MAC address.
 func randomMAC() net.HardwareAddr {
 	b := make([]byte, 6)
-	for i := range b {
-		b[i] = byte(rand.Uint32())
-	}
+	rand.Read(b)
 	// Unicast (bit 0 = 0) + locally administered (bit 1 = 1)
 	b[0] = (b[0] & 0xFE) | 0x02
 	return net.HardwareAddr(b)

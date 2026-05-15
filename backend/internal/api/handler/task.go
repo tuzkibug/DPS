@@ -60,6 +60,11 @@ func (h *TaskHandler) CreateTask(c *gin.Context) {
 		}
 		filePath = fullPath
 	} else if req.FileContent != "" {
+		const maxFileSize = 50 * 1024 * 1024 // 50MB base64 limit (~37MB decoded)
+		if len(req.FileContent) > maxFileSize {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "file content exceeds 50MB limit"})
+			return
+		}
 		data, err := base64.StdEncoding.DecodeString(req.FileContent)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid file content"})

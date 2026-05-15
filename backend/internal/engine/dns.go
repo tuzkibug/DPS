@@ -48,6 +48,9 @@ func parseDomain(domain string) ([]byte, error) {
 	labels := []byte{}
 	for _, c := range []byte(domain) {
 		if c == '.' {
+			if len(labels) == 0 {
+				return nil, fmt.Errorf("empty label in domain %q", domain)
+			}
 			if len(labels) > 63 {
 				return nil, fmt.Errorf("label exceeds 63 characters")
 			}
@@ -207,6 +210,11 @@ func BuildIPv4Packet(srcIP, dstIP string, payload []byte) ([]byte, error) {
 	if src == nil || dst == nil {
 		return nil, fmt.Errorf("invalid IP address")
 	}
+	src4 := src.To4()
+	dst4 := dst.To4()
+	if src4 == nil || dst4 == nil {
+		return nil, fmt.Errorf("IPv6 addresses are not supported, use IPv4")
+	}
 
 	header := make([]byte, 20)
 	header[0] = 0x45
@@ -218,8 +226,8 @@ func BuildIPv4Packet(srcIP, dstIP string, payload []byte) ([]byte, error) {
 	header[8] = 17
 	binary.BigEndian.PutUint16(header[10:12], 0)
 
-	copy(header[12:16], src.To4())
-	copy(header[16:20], dst.To4())
+	copy(header[12:16], src4)
+	copy(header[16:20], dst4)
 
 	sum := checksum(header)
 	binary.BigEndian.PutUint16(header[10:12], sum)

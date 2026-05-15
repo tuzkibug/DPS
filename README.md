@@ -326,6 +326,26 @@ npm run test:watch # 监视模式
 
 ## 版本历史
 
+### v0.3.2 (2026-05-15) — 全面代码审计与质量加固
+
+- **修复** IPv6 地址被静默接受、生成损坏 IPv4 包的问题，现强制拒绝并返回明确错误
+- **修复** PCAP MAC/IP 校验错误被 `_` 静默丢弃，无效配置不报错（含 `readAndRewriteFile` 与 `NewPCAPSender`）
+- **修复** StopTask 与 watchStats 协程竞态写 Redis → 新增 `Done` channel 协调退出
+- **修复** 全部 Redis 操作无超时 → 统一使用 3 秒超时 context
+- **修复** 7 处 Redis/SQLite 写入错误被静默忽略 → 全部改为 `log.Printf`
+- **修复** 发包失败计数从未递增 → `PacketSender`/`PCAPSender` 均追踪 `failedCount`
+- **新增** 上传文件大小限制（base64 ≤ 50MB）
+- **新增** 域名解析拒绝空标签（连续点号、首字符点号）
+- **新增** 前端 Axios 响应拦截器，自动提取服务端错误消息
+- **修复** TaskList 每行渲染 `<LiveMonitor>` 导致 N 个 WebSocket 连接 → 替换为轻量行内按钮
+- **修复** TaskDetailPage 使用无 selector 的 Zustand 订阅 → 细粒度 selector
+- **新增** 404 路由、ErrorBoundary、路由驱动菜单高亮
+- **新增** QPS 折线图 SVG 无障碍 `aria-label`
+- **新增** 任务表格空状态提示
+- **优化** `randomIPv4`/`randomMAC` 使用 `crypto/rand.Read` 替代 10 次 PRNG 调用
+- **移除** 死代码 `PCAPSender.sendPacket()`
+- **新增** 13 个测试用例（随机 IP/MAC、IPv6 拒绝、域名验证、PCAP 校验、raw mode 路径）
+
 ### v0.3.1 (2026-05-15) — 随机源地址与显式网口绑定
 
 - **新增** 随机源 IP 支持：每包随机生成 IPv4 源地址，CSV 模式自动切换为 AF_PACKET raw socket 构建完整以太网帧

@@ -11,12 +11,14 @@ const API_BASE = '/api/v1';
 
 export const TaskDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
-  const { currentTask, fetchTask, loading } = useTaskStore();
+  const currentTask = useTaskStore(s => s.currentTask);
+  const fetchTask = useTaskStore(s => s.fetchTask);
+  const loading = useTaskStore(s => s.loading);
   const [editOpen, setEditOpen] = useState(false);
 
   useEffect(() => {
     if (id) fetchTask(id);
-  }, [id]);
+  }, [id, fetchTask]);
 
   if (loading) {
     return <Spin tip="Loading..." />;
