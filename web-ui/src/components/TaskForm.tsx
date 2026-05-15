@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Form, Input, InputNumber, Select, Button, Card, Upload, message, Breadcrumb, List, Typography, Spin, Space } from 'antd';
+import { Form, Input, InputNumber, Select, Button, Card, Upload, message, Breadcrumb, List, Typography, Spin, Space, Switch } from 'antd';
 import { FolderOutlined, FileOutlined, HomeOutlined } from '@ant-design/icons';
 import type { CreateTaskRequest, QoSConfig, PcapDirList } from '../api/types';
 import { useTaskStore } from '../stores/taskStore';
@@ -18,6 +18,9 @@ interface TaskFormValues {
   dst_ip: string;
   src_mac: string;
   dst_mac: string;
+  interface: string;
+  random_src_ip: boolean;
+  random_src_mac: boolean;
   target_qps: number;
   jitter: number;
   delay_min_ms: number;
@@ -31,6 +34,8 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onSuccess }) => {
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [inputType, setInputType] = useState<string>('csv');
+  const [randomSrcIP, setRandomSrcIP] = useState(false);
+  const [randomSrcMAC, setRandomSrcMAC] = useState(false);
   const createTask = useTaskStore(s => s.createTask);
 
   // PCAP directory browser state
@@ -97,6 +102,9 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onSuccess }) => {
         dst_ip: values.dst_ip,
         src_mac: values.src_mac,
         dst_mac: values.dst_mac,
+        interface: values.interface || '',
+        random_src_ip: values.random_src_ip || false,
+        random_src_mac: values.random_src_mac || false,
         start_time: values.start_time,
         duration_ms: (values as any).duration_sec ? (values as any).duration_sec * 1000 : 0,
         qos: {
@@ -222,21 +230,36 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onSuccess }) => {
           </Form.Item>
         )}
 
-        <Form.Item name="src_ip" label="Source IP" rules={[{ required: true }]}>
-          <Input placeholder="192.168.1.100" />
+        <Form.Item name="src_ip" label="Source IP" rules={[{ required: !randomSrcIP }]}>
+          <Input placeholder="192.168.1.100" disabled={randomSrcIP} />
         </Form.Item>
 
         <Form.Item name="dst_ip" label="Destination IP" rules={[{ required: true }]}>
           <Input placeholder="8.8.8.8" />
         </Form.Item>
 
-        <Form.Item name="src_mac" label="Source MAC" rules={[{ required: true }]}>
+        <Form.Item name="src_mac" label="Source MAC" rules={[{ required: !randomSrcMAC }]}>
           <Input placeholder="aa:bb:cc:dd:ee:ff" />
         </Form.Item>
 
         <Form.Item name="dst_mac" label="Destination MAC" rules={[{ required: true }]}>
           <Input placeholder="11:22:33:44:55:66" />
         </Form.Item>
+
+        <Form.Item name="random_src_ip" label="Random Source IP" valuePropName="checked" initialValue={false}>
+          <Switch onChange={(checked) => setRandomSrcIP(checked)} />
+        </Form.Item>
+
+        {randomSrcIP && (
+          <>
+            <Form.Item name="random_src_mac" label="Random Source MAC" valuePropName="checked" initialValue={false}>
+              <Switch onChange={(checked) => setRandomSrcMAC(checked)} />
+            </Form.Item>
+            <Form.Item name="interface" label="Network Interface" rules={[{ required: true }]}>
+              <Input placeholder="eth0" />
+            </Form.Item>
+          </>
+        )}
 
         <Form.Item name="target_qps" label="Target QPS" initialValue={100}>
           <InputNumber min={1} max={100000} style={{ width: '100%' }} />

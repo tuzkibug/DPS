@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"sync"
@@ -232,6 +233,9 @@ func (s *TaskScheduler) CreateTask(req *models.CreateTaskRequest, filePath strin
 		DstIP:      req.DstIP,
 		SrcMAC:     req.SrcMAC,
 		DstMAC:     req.DstMAC,
+		Interface:   req.Interface,
+		RandomSrcIP:  req.RandomSrcIP,
+		RandomSrcMAC: req.RandomSrcMAC,
 		QoS:        req.QoS,
 		Status:     models.TaskStatusPending,
 		CreatedAt:  time.Now(),
@@ -288,6 +292,11 @@ func (s *TaskScheduler) UpdateTask(taskID uuid.UUID, req *models.UpdateTaskReque
 	}
 
 	task.UpdatedAt = time.Now()
+
+	if task.RandomSrcIP && task.Interface == "" {
+		return nil, fmt.Errorf("interface is required when random_src_ip is enabled")
+	}
+
 	err = s.sqlite.UpdateTask(task)
 	if err != nil {
 		return nil, err

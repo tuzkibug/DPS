@@ -46,6 +46,11 @@ export const TaskDetailPage: React.FC = () => {
           <Descriptions.Item label="Destination IP">{task.dst_ip}</Descriptions.Item>
           <Descriptions.Item label="Source MAC">{task.src_mac}</Descriptions.Item>
           <Descriptions.Item label="Destination MAC">{task.dst_mac}</Descriptions.Item>
+          <Descriptions.Item label="Random Source IP">{task.random_src_ip ? 'Yes' : 'No'}</Descriptions.Item>
+          <Descriptions.Item label="Random Source MAC">{task.random_src_mac ? 'Yes' : 'No'}</Descriptions.Item>
+          {task.interface && (
+            <Descriptions.Item label="Interface">{task.interface}</Descriptions.Item>
+          )}
           <Descriptions.Item label="Target QPS">{task.qos.target_qps}</Descriptions.Item>
           <Descriptions.Item label="Jitter">{task.qos.jitter}</Descriptions.Item>
           <Descriptions.Item label="Min Delay (ms)">{task.qos.delay_min_ms}</Descriptions.Item>

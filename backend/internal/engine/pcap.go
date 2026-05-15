@@ -3,6 +3,7 @@ package engine
 import (
 	"fmt"
 	"log"
+	"math/rand/v2"
 	"net"
 	"os"
 	"path/filepath"
@@ -108,6 +109,97 @@ func readAndRewriteFile(path, srcMAC, dstMAC, srcIP, dstIP string) ([][]byte, er
 	return packets, nil
 }
 
+// loadRawPacketsFromPath loads PCAP packets without rewriting addresses.
+func loadRawPacketsFromPath(path string) ([]packetGroup, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, fmt.Errorf("stat %s: %w", path, err)
+	}
+	if info.IsDir() {
+		return loadRawPacketsFromDir(path)
+	}
+	packets, err := readRawFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read pcap file %s: %w", path, err)
+	}
+	if len(packets) == 0 {
+		return nil, fmt.Errorf("no packets in %s", path)
+	}
+	return []packetGroup{{Name: filepath.Base(path), Packets: packets}}, nil
+}
+
+func loadRawPacketsFromDir(dirPath string) ([]packetGroup, error) {
+	entries, err := os.ReadDir(dirPath)
+	if err != nil {
+		return nil, fmt.Errorf("read dir %s: %w", dirPath, err)
+	}
+	var pcapFiles []string
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		ext := filepath.Ext(e.Name())
+		if ext == ".pcap" || ext == ".pcapng" || ext == ".cap" {
+			pcapFiles = append(pcapFiles, e.Name())
+		}
+	}
+	sort.Strings(pcapFiles)
+
+	var groups []packetGroup
+	for _, name := range pcapFiles {
+		fullPath := filepath.Join(dirPath, name)
+		packets, err := readRawFile(fullPath)
+		if err != nil {
+			log.Printf("loadRawPacketsFromDir: skipping %s: %v", fullPath, err)
+			continue
+		}
+		if len(packets) > 0 {
+			groups = append(groups, packetGroup{Name: name, Packets: packets})
+		}
+	}
+	if len(groups) == 0 {
+		return nil, fmt.Errorf("no valid PCAP files found in %s", dirPath)
+	}
+	return groups, nil
+}
+
+// readRawFile reads a single PCAP file and returns raw packet bytes.
+func readRawFile(path string) ([][]byte, error) {
+	handle, err := pcap.OpenOffline(path)
+	if err != nil {
+		return nil, fmt.Errorf("open pcap %s: %w", path, err)
+	}
+	defer handle.Close()
+
+	var packets [][]byte
+	packetSource := gopacket.NewPacketSource(handle, handle.LinkType())
+	for packet := range packetSource.Packets() {
+		packets = append(packets, packet.Data())
+	}
+	return packets, nil
+}
+
+// randomIPv4 returns a random IPv4 address.
+func randomIPv4() net.IP {
+	return net.IPv4(
+		byte(rand.Uint32()),
+		byte(rand.Uint32()),
+		byte(rand.Uint32()),
+		byte(rand.Uint32()),
+	)
+}
+
+// randomMAC returns a random unicast, locally administered MAC address.
+func randomMAC() net.HardwareAddr {
+	b := make([]byte, 6)
+	for i := range b {
+		b[i] = byte(rand.Uint32())
+	}
+	// Unicast (bit 0 = 0) + locally administered (bit 1 = 1)
+	b[0] = (b[0] & 0xFE) | 0x02
+	return net.HardwareAddr(b)
+}
+
 // rewritePacket modifies Ethernet MACs and IPv4 addresses in-place, returns new byte slice.
 func rewritePacket(raw []byte, srcMAC, dstMAC net.HardwareAddr, srcIP, dstIP net.IP) ([]byte, error) {
 	packet := gopacket.NewPacket(raw, layers.LayerTypeEthernet, gopacket.Default)
@@ -171,12 +263,20 @@ func openRawSocket(srcIP net.IP) (int, int, error) {
 	if err != nil {
 		return -1, -1, fmt.Errorf("find interface for %s: %w", srcIP, err)
 	}
+	return openRawSocketByName(iface)
+}
 
+// openRawSocketByName creates an AF_PACKET raw socket bound to the named interface.
+func openRawSocketByName(iface string) (int, int, error) {
 	ifaceObj, err := net.InterfaceByName(iface)
 	if err != nil {
 		return -1, -1, fmt.Errorf("get interface %s: %w", iface, err)
 	}
+	return bindRawSocket(ifaceObj)
+}
 
+// bindRawSocket creates and binds an AF_PACKET raw socket to the given interface.
+func bindRawSocket(ifaceObj *net.Interface) (int, int, error) {
 	fd, err := syscall.Socket(syscall.AF_PACKET, syscall.SOCK_RAW, int(htons(syscall.ETH_P_ALL)))
 	if err != nil {
 		return -1, -1, fmt.Errorf("create raw socket: %w", err)

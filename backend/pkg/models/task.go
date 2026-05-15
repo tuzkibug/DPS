@@ -39,6 +39,9 @@ type Task struct {
 	DstIP        string      `json:"dst_ip"`
 	SrcMAC       string      `json:"src_mac"`
 	DstMAC       string      `json:"dst_mac"`
+	Interface    string      `json:"interface"`
+	RandomSrcIP  bool        `json:"random_src_ip"`
+	RandomSrcMAC bool        `json:"random_src_mac"`
 	StartTime    time.Time   `json:"start_time"`
 	DurationMs   int         `json:"duration_ms"`
 	QoS          QoSConfig   `json:"qos"`
@@ -67,10 +70,13 @@ type CreateTaskRequest struct {
 	InputType   InputType  `json:"input_type" binding:"required"`
 	FileContent string     `json:"file_content"` // base64 encoded file content
 	FilePath    string     `json:"file_path"`    // server-side path for PCAP files
-	SrcIP       string     `json:"src_ip" binding:"required"`
+	SrcIP       string     `json:"src_ip"`
 	DstIP       string     `json:"dst_ip" binding:"required"`
-	SrcMAC      string     `json:"src_mac" binding:"required"`
+	SrcMAC      string     `json:"src_mac"`
 	DstMAC      string     `json:"dst_mac" binding:"required"`
+	Interface   string     `json:"interface"`
+	RandomSrcIP  bool      `json:"random_src_ip"`
+	RandomSrcMAC bool      `json:"random_src_mac"`
 	StartTime   *time.Time `json:"start_time"`
 	DurationMs  int        `json:"duration_ms"`
 	QoS         QoSConfig  `json:"qos" binding:"required"`
@@ -83,6 +89,9 @@ type UpdateTaskRequest struct {
 	SrcMAC      *string    `json:"src_mac"`
 	DstMAC      *string    `json:"dst_mac"`
 	FilePath    *string    `json:"file_path"`
+	Interface   *string    `json:"interface"`
+	RandomSrcIP  *bool     `json:"random_src_ip"`
+	RandomSrcMAC *bool     `json:"random_src_mac"`
 	StartTime   *time.Time `json:"start_time"`
 	DurationMs  *int       `json:"duration_ms"`
 	QoS         *QoSConfig `json:"qos"`

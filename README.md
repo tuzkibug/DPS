@@ -5,6 +5,8 @@
 ## 功能特性
 
 - **双输入模式**：CSV 域名列表（UDP socket）/ PCAP 抓包文件回放（AF_PACKET raw socket，以太网帧级地址改写）
+- **随机源地址**：支持每包随机源 IP 和随机源 MAC，模拟海量客户端 DNS 请求；CSV 模式自动切换为 AF_PACKET raw socket 构建完整帧
+- **网口指定**：可显式指定发包网口名称（如 eth0），替代原有基于源 IP 的自动反查
 - **PCAP 服务器路径**：无需上传，直接选择服务器端 PCAP 目录或文件，支持按日期组织
 - **QoS 控制**：精细控制发包速率（QPS）、抖动（Jitter）、延迟（Delay），高 QPS 自动批处理
 - **实时监控**：WebSocket 每秒推送统计（当前 QPS、失败数、运行时长、累计运行时长）
@@ -206,11 +208,14 @@ pcap/
 | Destination IP | 目标 DNS 服务器 IP | `8.8.8.8` |
 | Source MAC | 源 MAC 地址 | `08:00:27:ad:db:96` |
 | Destination MAC | 目标 MAC 地址 / 网关 MAC | `52:55:0a:00:02:02` |
+| Random Source IP | 每包随机生成源 IP（开启后需指定 Network Interface） | `否` |
+| Random Source MAC | 每包随机生成源 MAC（开启 Random Source IP 后可见） | `否` |
+| Network Interface | 发包网口名称（开启随机源 IP 时必填） | `eth0` |
 | Target QPS | 目标每秒发包数 | `100` |
 | Jitter | 速率抖动比例 (0-1) | `0` |
 | Min/Max Delay | 每包额外延迟范围 (ms) | `0` / `0` |
 
-> PCAP 模式会将包内原有的源/目的 MAC 和 IP 全部替换为配置值，重算校验和后通过 raw socket 发送完整以太网帧。
+> PCAP 模式会将包内原有的源/目的 MAC 和 IP 全部替换为配置值，重算校验和后通过 raw socket 发送。CSV 模式开启随机源 IP/MAC 后同样切换为 AF_PACKET raw socket，手动构建完整的 L2-L7 包并注入随机地址。
 
 ### 3. 操作任务
 
@@ -264,6 +269,9 @@ curl -X POST http://localhost:8080/api/v1/tasks \
     "dst_ip": "8.8.8.8",
     "src_mac": "aa:bb:cc:dd:ee:ff",
     "dst_mac": "11:22:33:44:55:66",
+    "interface": "eth0",
+    "random_src_ip": true,
+    "random_src_mac": false,
     "qos": {
       "target_qps": 500,
       "jitter": 0.05,
@@ -315,6 +323,16 @@ npm run test:watch # 监视模式
 6. PCAP 模式仅支持 Ethernet + IPv4 帧格式
 
 ## 版本历史
+
+### v0.3.1 (2026-05-15) — 随机源地址与显式网口绑定
+
+- **新增** 随机源 IP 支持：每包随机生成 IPv4 源地址，CSV 模式自动切换为 AF_PACKET raw socket 构建完整以太网帧
+- **新增** 随机源 MAC 支持：每包随机生成单播、本地管理的 MAC 地址
+- **新增** 显式网口名称配置（`interface` 字段），替代原有基于源 IP 的网口反查
+- **新增** 前端级联 UI：Random Source IP 开关 → 展开 Random Source MAC + Network Interface 字段
+- **新增** 创建任务时校验：开启随机源 IP 时必须指定网口名称
+- **重构** `openRawSocket` 提取 `bindRawSocket` / `openRawSocketByName`，支持按名称绑定网口
+- **新增** `loadRawPacketsFromPath` / `readRawFile`，PCAP 随机模式按需逐包改写地址
 
 ### v0.2.7 (2026-05-13) — 测试基础设施与代码去重
 

@@ -39,6 +39,9 @@ func (s *SQLiteStore) initSchema() error {
 		src_mac TEXT NOT NULL,
 		dst_mac TEXT NOT NULL,
 		start_time TEXT,
+			interface TEXT DEFAULT '',
+			random_src_ip INTEGER DEFAULT 0,
+			random_src_mac INTEGER DEFAULT 0,
 		duration_ms INTEGER DEFAULT 0,
 		target_qps INTEGER DEFAULT 100,
 		jitter REAL DEFAULT 0,
@@ -90,6 +93,9 @@ func (s *SQLiteStore) migrateSchema() error {
 	}{
 		{"last_run_at", "ALTER TABLE tasks ADD COLUMN last_run_at TEXT DEFAULT ''"},
 		{"total_run_ms", "ALTER TABLE tasks ADD COLUMN total_run_ms INTEGER DEFAULT 0"},
+		{"interface", "ALTER TABLE tasks ADD COLUMN interface TEXT DEFAULT ''"},
+		{"random_src_ip", "ALTER TABLE tasks ADD COLUMN random_src_ip INTEGER DEFAULT 0"},
+		{"random_src_mac", "ALTER TABLE tasks ADD COLUMN random_src_mac INTEGER DEFAULT 0"},
 	}
 
 	for _, m := range migrations {
@@ -121,11 +127,13 @@ func (s *SQLiteStore) CreateTask(task *models.Task) error {
 	qos := task.QoS
 	_, err := s.db.Exec(`
 		INSERT INTO tasks (id, name, input_type, file_path, src_ip, dst_ip, src_mac, dst_mac,
+			interface, random_src_ip, random_src_mac,
 			start_time, duration_ms, target_qps, jitter, delay_min_ms, delay_max_ms,
 			status, created_at, updated_at, last_run_at, total_run_ms)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		task.ID.String(), task.Name, task.InputType, task.FilePath,
 		task.SrcIP, task.DstIP, task.SrcMAC, task.DstMAC,
+		task.Interface, task.RandomSrcIP, task.RandomSrcMAC,
 		task.StartTime.Format(time.RFC3339), task.DurationMs,
 		qos.TargetQPS, qos.Jitter, qos.DelayMinMs, qos.DelayMaxMs,
 		task.Status, task.CreatedAt.Format(time.RFC3339), task.UpdatedAt.Format(time.RFC3339),
@@ -136,6 +144,7 @@ func (s *SQLiteStore) CreateTask(task *models.Task) error {
 func (s *SQLiteStore) GetTask(id uuid.UUID) (*models.Task, error) {
 	row := s.db.QueryRow(`
 		SELECT id, name, input_type, file_path, src_ip, dst_ip, src_mac, dst_mac,
+			interface, random_src_ip, random_src_mac,
 			start_time, duration_ms, target_qps, jitter, delay_min_ms, delay_max_ms,
 			status, created_at, updated_at, last_run_at, total_run_ms
 		FROM tasks WHERE id = ?`, id.String())
@@ -145,6 +154,7 @@ func (s *SQLiteStore) GetTask(id uuid.UUID) (*models.Task, error) {
 	err := row.Scan(
 		&task.ID, &task.Name, &task.InputType, &task.FilePath,
 		&task.SrcIP, &task.DstIP, &task.SrcMAC, &task.DstMAC,
+		&task.Interface, &task.RandomSrcIP, &task.RandomSrcMAC,
 		&startTimeStr, &task.DurationMs,
 		&task.QoS.TargetQPS, &task.QoS.Jitter, &task.QoS.DelayMinMs, &task.QoS.DelayMaxMs,
 		&task.Status, &createdAtStr, &updatedAtStr, &lastRunAtStr, &task.TotalRunMs)
@@ -166,6 +176,7 @@ func (s *SQLiteStore) GetTask(id uuid.UUID) (*models.Task, error) {
 func (s *SQLiteStore) ListTasks() ([]*models.Task, error) {
 	rows, err := s.db.Query(`
 		SELECT id, name, input_type, file_path, src_ip, dst_ip, src_mac, dst_mac,
+			interface, random_src_ip, random_src_mac,
 			start_time, duration_ms, target_qps, jitter, delay_min_ms, delay_max_ms,
 			status, created_at, updated_at, last_run_at, total_run_ms
 		FROM tasks ORDER BY created_at DESC`)
@@ -181,6 +192,7 @@ func (s *SQLiteStore) ListTasks() ([]*models.Task, error) {
 		err := rows.Scan(
 			&task.ID, &task.Name, &task.InputType, &task.FilePath,
 			&task.SrcIP, &task.DstIP, &task.SrcMAC, &task.DstMAC,
+			&task.Interface, &task.RandomSrcIP, &task.RandomSrcMAC,
 			&startTimeStr, &task.DurationMs,
 			&task.QoS.TargetQPS, &task.QoS.Jitter, &task.QoS.DelayMinMs, &task.QoS.DelayMaxMs,
 			&task.Status, &createdAtStr, &updatedAtStr, &lastRunAtStr, &task.TotalRunMs)
@@ -209,9 +221,11 @@ func (s *SQLiteStore) UpdateTask(task *models.Task) error {
 	qos := task.QoS
 	_, err := s.db.Exec(`
 		UPDATE tasks SET name=?, src_ip=?, dst_ip=?, src_mac=?, dst_mac=?,
+			interface=?, random_src_ip=?, random_src_mac=?,
 			file_path=?, start_time=?, duration_ms=?, target_qps=?, jitter=?, delay_min_ms=?, delay_max_ms=?,
 			status=?, updated_at=?, last_run_at=?, total_run_ms=? WHERE id=?`,
 		task.Name, task.SrcIP, task.DstIP, task.SrcMAC, task.DstMAC,
+		task.Interface, task.RandomSrcIP, task.RandomSrcMAC,
 		task.FilePath, task.StartTime.Format(time.RFC3339), task.DurationMs,
 		qos.TargetQPS, qos.Jitter, qos.DelayMinMs, qos.DelayMaxMs,
 		task.Status, time.Now().Format(time.RFC3339), lastRunAt, task.TotalRunMs, task.ID.String())

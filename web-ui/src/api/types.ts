@@ -7,6 +7,9 @@ export interface Task {
   dst_ip: string;
   src_mac: string;
   dst_mac: string;
+  interface: string;
+  random_src_ip: boolean;
+  random_src_mac: boolean;
   start_time: string;
   duration_ms: number;
   qos: QoSConfig;
@@ -44,10 +47,13 @@ export interface CreateTaskRequest {
   input_type: 'csv' | 'pcap';
   file_content?: string;
   file_path?: string;
-  src_ip: string;
+  src_ip?: string;
   dst_ip: string;
-  src_mac: string;
+  src_mac?: string;
   dst_mac: string;
+  interface?: string;
+  random_src_ip?: boolean;
+  random_src_mac?: boolean;
   start_time?: string;
   duration_ms?: number;
   qos: QoSConfig;
@@ -66,6 +72,9 @@ export interface UpdateTaskRequest {
   src_mac?: string;
   dst_mac?: string;
   file_path?: string;
+  interface?: string;
+  random_src_ip?: boolean;
+  random_src_mac?: boolean;
   start_time?: string;
   duration_ms?: number;
   qos?: QoSConfig;

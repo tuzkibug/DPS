@@ -35,6 +35,11 @@ func (h *TaskHandler) CreateTask(c *gin.Context) {
 		return
 	}
 
+	if req.RandomSrcIP && req.Interface == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "interface is required when random_src_ip is enabled"})
+		return
+	}
+
 	filePath := ""
 	if req.InputType == models.InputTypePCAP && req.FilePath != "" {
 		// PCAP server-side path: join with base dir and validate

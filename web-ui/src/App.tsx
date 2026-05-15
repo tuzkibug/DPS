@@ -5,7 +5,7 @@ import { TaskDetailPage } from './pages/TaskDetailPage';
 import { TaskListPage } from './pages/TaskListPage';
 import { Layout, Menu } from 'antd';
 
-const { Header, Content } = Layout;
+const { Header, Content, Footer } = Layout;
 
 const App: React.FC = () => {
   return (
@@ -32,6 +32,9 @@ const App: React.FC = () => {
             <Route path="/tasks/:id" element={<TaskDetailPage />} />
           </Routes>
         </Content>
+        <Footer style={{ textAlign: 'center', color: '#999' }}>
+          Created by Tuzkibug
+        </Footer>
       </Layout>
     </BrowserRouter>
   );

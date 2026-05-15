@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Modal, Form, Input, InputNumber, message } from 'antd';
+import { Modal, Form, Input, InputNumber, message, Switch } from 'antd';
 import type { Task, UpdateTaskRequest } from '../api/types';
 import { useTaskStore } from '../stores/taskStore';
 
@@ -12,6 +12,8 @@ interface Props {
 export const EditTaskModal: React.FC<Props> = ({ task, open, onClose }) => {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
+  const [randomSrcIP, setRandomSrcIP] = useState(false);
+  const [randomSrcMAC, setRandomSrcMAC] = useState(false);
   const updateTask = useTaskStore(s => s.updateTask);
 
   useEffect(() => {
@@ -23,12 +25,17 @@ export const EditTaskModal: React.FC<Props> = ({ task, open, onClose }) => {
         dst_ip: task.dst_ip,
         src_mac: task.src_mac,
         dst_mac: task.dst_mac,
+        interface: task.interface,
+        random_src_ip: task.random_src_ip,
+        random_src_mac: task.random_src_mac,
         target_qps: task.qos.target_qps,
         jitter: task.qos.jitter,
         delay_min_ms: task.qos.delay_min_ms,
         delay_max_ms: task.qos.delay_max_ms,
         duration_sec: Math.round(task.duration_ms / 1000),
       });
+      setRandomSrcIP(task.random_src_ip);
+      setRandomSrcMAC(task.random_src_mac);
     }
   }, [open, task, form]);
 
@@ -43,6 +50,9 @@ export const EditTaskModal: React.FC<Props> = ({ task, open, onClose }) => {
         dst_ip: values.dst_ip,
         src_mac: values.src_mac,
         dst_mac: values.dst_mac,
+        interface: values.interface || '',
+        random_src_ip: values.random_src_ip || false,
+        random_src_mac: values.random_src_mac || false,
         duration_ms: values.duration_sec ? values.duration_sec * 1000 : 0,
         qos: {
           target_qps: values.target_qps,
@@ -78,18 +88,33 @@ export const EditTaskModal: React.FC<Props> = ({ task, open, onClose }) => {
         <Form.Item name="file_path" label="File Path">
           <Input placeholder="Server path for PCAP, or uploaded file path" />
         </Form.Item>
-        <Form.Item name="src_ip" label="Source IP" rules={[{ required: true }]}>
-          <Input />
+        <Form.Item name="src_ip" label="Source IP" rules={[{ required: !randomSrcIP }]}>
+          <Input disabled={randomSrcIP} />
         </Form.Item>
         <Form.Item name="dst_ip" label="Destination IP" rules={[{ required: true }]}>
           <Input />
         </Form.Item>
-        <Form.Item name="src_mac" label="Source MAC" rules={[{ required: true }]}>
+        <Form.Item name="src_mac" label="Source MAC" rules={[{ required: !randomSrcMAC }]}>
           <Input />
         </Form.Item>
         <Form.Item name="dst_mac" label="Destination MAC" rules={[{ required: true }]}>
           <Input />
         </Form.Item>
+
+        <Form.Item name="random_src_ip" label="Random Source IP" valuePropName="checked" initialValue={false}>
+          <Switch onChange={(checked) => setRandomSrcIP(checked)} />
+        </Form.Item>
+
+        {randomSrcIP && (
+          <>
+            <Form.Item name="random_src_mac" label="Random Source MAC" valuePropName="checked" initialValue={false}>
+              <Switch onChange={(checked) => setRandomSrcMAC(checked)} />
+            </Form.Item>
+            <Form.Item name="interface" label="Network Interface" rules={[{ required: true }]}>
+              <Input placeholder="eth0" />
+            </Form.Item>
+          </>
+        )}
         <Form.Item name="target_qps" label="Target QPS">
           <InputNumber min={1} max={100000} style={{ width: '100%' }} />
         </Form.Item>
