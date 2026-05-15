@@ -35,10 +35,12 @@ const AppMenu: React.FC = () => {
   const location = useLocation();
   const selectedKey = location.pathname.startsWith('/tasks/new') ? 'create' : 'tasks';
   return (
-    <Menu theme="dark" mode="horizontal" selectedKeys={[selectedKey]}>
-      <Menu.Item key="tasks"><Link to="/tasks">Tasks</Link></Menu.Item>
-      <Menu.Item key="create"><Link to="/tasks/new">Create Task</Link></Menu.Item>
-    </Menu>
+    <Menu theme="dark" mode="horizontal" selectedKeys={[selectedKey]}
+      items={[
+        { key: 'tasks', label: <Link to="/tasks">Tasks</Link> },
+        { key: 'create', label: <Link to="/tasks/new">Create Task</Link> },
+      ]}
+    />
   );
 };
 

@@ -326,6 +326,13 @@ npm run test:watch # 监视模式
 
 ## 版本历史
 
+### v0.3.3 (2026-05-15) — IPv4 包头修复与 WebSocket 代理
+
+- **修复** `BuildIPv4Packet` IPv4 头 Protocol/TTL 字段错位 → 发包无法被抓包工具识别为 UDP
+- **修复** Vite 开发服务器 WebSocket 代理未启用 `ws: true` → LiveMonitor 连接失败
+- **修复** Antd Menu `children` 弃用警告 → 改用 `items` API
+- **恢复** TaskList 中 LiveMonitor 和 QpsSparkline 列
+
 ### v0.3.2 (2026-05-15) — 全面代码审计与质量加固
 
 - **修复** IPv6 地址被静默接受、生成损坏 IPv4 包的问题，现强制拒绝并返回明确错误

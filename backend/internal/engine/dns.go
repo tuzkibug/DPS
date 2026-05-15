@@ -217,14 +217,15 @@ func BuildIPv4Packet(srcIP, dstIP string, payload []byte) ([]byte, error) {
 	}
 
 	header := make([]byte, 20)
-	header[0] = 0x45
-	header[1] = 0x00
+	header[0] = 0x45       // Version=4, IHL=5
+	header[1] = 0x00       // DSCP=0, ECN=0
 	totalLen := 20 + len(payload)
 	binary.BigEndian.PutUint16(header[2:4], uint16(totalLen))
-	binary.BigEndian.PutUint16(header[4:6], 0x4000)
-	binary.BigEndian.PutUint16(header[6:8], 64)
-	header[8] = 17
-	binary.BigEndian.PutUint16(header[10:12], 0)
+	binary.BigEndian.PutUint16(header[4:6], 0x4000) // Identification
+	// Bytes 6-7: Flags=0, Fragment Offset=0
+	header[8] = 64  // TTL
+	header[9] = 17  // Protocol = UDP
+	binary.BigEndian.PutUint16(header[10:12], 0) // Checksum placeholder
 
 	copy(header[12:16], src4)
 	copy(header[16:20], dst4)
